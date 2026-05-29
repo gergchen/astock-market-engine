@@ -6,19 +6,19 @@ interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const badgeVariants = {
-  default: "bg-primary text-primary-foreground",
+  default: "bg-primary/12 text-primary border-primary/20",
   secondary: "bg-secondary text-secondary-foreground",
-  destructive: "bg-destructive text-destructive-foreground",
-  outline: "border text-foreground",
-  up: "bg-[#ff4d4f]/15 text-[#ff4d4f]",
-  down: "bg-[#00b578]/15 text-[#00b578]",
+  destructive: "bg-destructive/12 text-destructive border-destructive/20",
+  outline: "border border-border text-muted-foreground",
+  up: "bg-up-subtle text-up",
+  down: "bg-down-subtle text-down",
 }
 
 function Badge({ className, variant = "default", ...props }: BadgeProps) {
   return (
     <div
       className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors",
+        "inline-flex items-center rounded border px-2 py-0.5 text-[11px] font-medium tracking-wide",
         badgeVariants[variant],
         className
       )}

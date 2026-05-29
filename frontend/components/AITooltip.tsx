@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useRef, useCallback, type ReactNode } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Brain, Loader2 } from 'lucide-react'
+import { Loader2, FileText } from 'lucide-react'
+import { API_BASE } from '@/lib/api'
 
 interface Props {
   children: ReactNode
@@ -11,7 +11,6 @@ interface Props {
   side?: 'top' | 'bottom' | 'left' | 'right'
 }
 
-// Simple in-memory cache per symbol+query
 const _cache = new Map<string, string>()
 
 export default function AITooltip({ children, symbol, query, side = 'top' }: Props) {
@@ -29,7 +28,7 @@ export default function AITooltip({ children, symbol, query, side = 'top' }: Pro
     }
     setLoading(true)
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/analysis/stock`, {
+      const res = await fetch(`${API_BASE}/api/analysis/stock`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -42,7 +41,6 @@ export default function AITooltip({ children, symbol, query, side = 'top' }: Pro
         const raw = typeof data.analysis === 'string'
           ? data.analysis
           : data.analysis?.raw ?? data.analysis?.text ?? ''
-        // Extract first meaningful paragraph (skip markdown headers)
         const lines = raw.split('\n').filter((l: string) =>
           l.trim() && !l.startsWith('#') && l.length > 10
         )
@@ -51,7 +49,7 @@ export default function AITooltip({ children, symbol, query, side = 'top' }: Pro
         setText(snippet)
       }
     } catch {
-      setText('AI 解释暂时不可用')
+      setText('分析暂时不可用')
     } finally {
       setLoading(false)
     }
@@ -84,44 +82,32 @@ export default function AITooltip({ children, symbol, query, side = 'top' }: Pro
     >
       {children}
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.92 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.92 }}
-            transition={{ duration: 0.15 }}
-            className="absolute z-50 w-72"
-            style={sideStyles[side]}
-          >
-            <div
-              className="p-4 rounded-xl border shadow-xl backdrop-blur-xl"
-              style={{
-                background: 'rgba(13,17,23,0.97)',
-                borderColor: '#30363D',
-              }}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <Brain className="w-3.5 h-3.5 text-primary" />
-                <span className="text-xs font-semibold text-primary">AI 解读</span>
-              </div>
-
-              {loading ? (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  分析中...
-                </div>
-              ) : (
-                <p className="text-xs leading-relaxed text-[#C9D1D9]">{text}</p>
-              )}
-
-              <div className="mt-2 text-[10px] text-muted-foreground">
-                {symbol} · 不构成投资建议
-              </div>
+      {open && (
+        <div
+          className="absolute z-50 w-72 transition-opacity duration-150"
+          style={sideStyles[side]}
+        >
+          <div className="p-4 rounded border border-border bg-[hsl(var(--bg-overlay))] shadow-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium text-foreground">快速解读</span>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
+            {loading ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                分析中...
+              </div>
+            ) : (
+              <p className="text-xs leading-relaxed text-muted-foreground">{text}</p>
+            )}
+
+            <div className="mt-2 text-[10px] text-muted-foreground/60">
+              {symbol} · 不构成投资建议
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

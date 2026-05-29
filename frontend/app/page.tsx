@@ -1,18 +1,26 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
-import { Search, TrendingUp, BarChart3, Brain, Zap, Shield } from 'lucide-react'
+import {
+  Search, TrendingUp, BarChart3, Activity,
+  ArrowRight, BookOpen, LineChart, Layers,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent } from '@/components/ui/card'
 
-const features = [
-  { icon: Brain, title: 'AI 认知分析', desc: '不是指标堆砌，而是告诉你为什么涨、为什么跌' },
-  { icon: TrendingUp, title: '主力行为识别', desc: '吸筹、洗盘、主升、出货 — 看清主力在做什么' },
-  { icon: Zap, title: '情绪周期判断', desc: '冰点→修复→主升→高潮→分歧→退潮，当前在哪个阶段' },
-  { icon: Shield, title: '风险预警', desc: '高位放量滞涨、大单出货，提前发现风险信号' },
+const FEATURES = [
+  { icon: TrendingUp, title: '主力行为识别', desc: '吸筹、洗盘、主升、出货 — 追踪资金动向' },
+  { icon: Activity, title: '情绪周期判断', desc: '冰点→修复→主升→高潮，定位当前阶段' },
+  { icon: BarChart3, title: '量化评分', desc: '趋势、量能、位置三维评分体系' },
+  { icon: Layers, title: '策略回测', desc: '均线突破、量价配合、龙头跟踪回测验证' },
+]
+
+const NAV = [
+  { href: '/market', label: '大盘', icon: LineChart, desc: '市场全景' },
+  { href: '/review', label: '复盘', icon: BookOpen, desc: '收盘解读' },
+  { href: '/workbench', label: '工作台', icon: Activity, desc: '实时监控' },
+  { href: '/backtest', label: '回测', icon: BarChart3, desc: '策略验证' },
 ]
 
 export default function HomePage() {
@@ -20,117 +28,114 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!symbol.trim()) return
     setLoading(true)
     router.push(`/stock?symbol=${symbol.trim()}`)
   }
 
-  const quickStocks = ['600519', '000858', '300750', '002594', '601012', '000333']
+  const QUICK = ['600519', '000858', '300750', '002594', '601012', '000333']
 
   return (
     <div className="min-h-screen">
-      {/* 导航 */}
-      <header className="border-b border-border/50">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+      {/* ── 顶部导航 ── */}
+      <header className="border-b border-border bg-[hsl(var(--bg-surface))]">
+        <div className="max-w-5xl mx-auto px-5 h-12 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center text-xs font-bold text-black">
-              A
+            <div className="w-6 h-6 rounded bg-primary/15 flex items-center justify-center">
+              <span className="text-[10px] font-bold text-primary">A</span>
             </div>
-            <span className="font-semibold text-sm">AStock Copilot</span>
+            <span className="font-semibold text-sm tracking-tight">AStock</span>
+            <span className="text-[10px] text-muted-foreground tracking-wider ml-1 hidden sm:inline">市场认知引擎</span>
           </div>
-          <nav className="flex items-center gap-4 text-sm text-muted-foreground">
-            <a href="/" className="hover:text-foreground transition-colors">首页</a>
-            <a href="/market" className="hover:text-foreground transition-colors">大盘</a>
-            <a href="/review" className="hover:text-foreground transition-colors">复盘</a>
-            <a href="/workbench" className="hover:text-foreground transition-colors flex items-center gap-1">
-              <Zap className="w-3 h-3" />
-              工作台
-            </a>
-            <a href="/backtest" className="hover:text-foreground transition-colors">回测</a>
-            <a href="/strategies" className="hover:text-foreground transition-colors">策略</a>
+          <nav className="flex items-center gap-1">
+            {NAV.map(link => (
+              <a key={link.href} href={link.href}
+                className="px-3 py-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                {link.label}
+              </a>
+            ))}
           </nav>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="max-w-3xl mx-auto px-4 pt-24 pb-12 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/50 border border-border/50 text-xs text-accent-foreground mb-6">
-            <BarChart3 className="w-3 h-3" />
-            A股市场认知引擎 V2
-          </div>
-          <h1 className="text-4xl font-bold tracking-tight mb-4">
-            真正理解A股的
-            <span className="text-primary"> AI 认知系统</span>
+      {/* ── Hero ── */}
+      <section className="max-w-2xl mx-auto px-5 pt-20 pb-12">
+        <div className="text-center mb-8">
+          <p className="text-xs text-muted-foreground tracking-widest uppercase mb-4">A股市场分析</p>
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 leading-tight">
+            看懂市场行为逻辑
           </h1>
-          <p className="text-muted-foreground text-lg mb-8 max-w-xl mx-auto leading-relaxed">
-            不是自动交易机器人，而是帮你理解市场行为逻辑的 AI 分析助手。
-            <br />输入股票代码，输出大白话分析。
+          <p className="text-muted-foreground text-sm leading-relaxed max-w-md mx-auto">
+            输入股票代码，获取主力行为分析、情绪周期判断和量化评分。
           </p>
+        </div>
 
-          {/* 搜索框 */}
-          <form onSubmit={handleSubmit} className="max-w-md mx-auto">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                value={symbol}
-                onChange={(e) => setSymbol(e.target.value)}
-                placeholder="输入股票代码，例如 600519"
-                className="pl-10 h-12 text-lg bg-card border-border/50 focus-visible:ring-primary"
-              />
-              <Button
-                type="submit"
-                size="lg"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-10"
-                disabled={loading}
-              >
-                分析
-              </Button>
-            </div>
-          </form>
-
-          {/* 快捷入口 */}
-          <div className="mt-6 flex items-center justify-center gap-2 flex-wrap">
-            <span className="text-xs text-muted-foreground">快捷：</span>
-            {quickStocks.map((code) => (
-              <button
-                key={code}
-                onClick={() => router.push(`/stock?symbol=${code}`)}
-                className="px-3 py-1 rounded-full bg-muted hover:bg-accent text-xs text-muted-foreground hover:text-foreground transition-all"
-              >
-                {code}
-              </button>
-            ))}
+        {/* 搜索框 */}
+        <form onSubmit={handleSubmit} className="max-w-lg mx-auto">
+          <div className="flex items-center border border-border rounded-md bg-[hsl(var(--bg-surface))] overflow-hidden focus-within:border-primary/40 transition-colors">
+            <Search className="ml-3 w-4 h-4 text-muted-foreground shrink-0" />
+            <Input
+              value={symbol}
+              onChange={e => setSymbol(e.target.value)}
+              placeholder="输入股票代码，例如 600519"
+              className="flex-1 h-10 border-0 bg-transparent focus-visible:ring-0 shadow-none text-sm"
+            />
+            <Button type="submit" size="sm" disabled={loading}
+              className="mr-1 h-7 px-4 text-xs rounded">
+              分析
+            </Button>
           </div>
-        </motion.div>
+        </form>
+
+        {/* 快捷入口 */}
+        <div className="mt-4 flex items-center justify-center gap-1.5 flex-wrap">
+          <span className="text-[11px] text-muted-foreground mr-1">热门：</span>
+          {QUICK.map(code => (
+            <button
+              key={code}
+              onClick={() => router.push(`/stock?symbol=${code}`)}
+              className="px-2.5 py-1 rounded bg-muted text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+            >
+              {code}
+            </button>
+          ))}
+        </div>
       </section>
 
-      {/* 功能卡片 */}
-      <section className="max-w-5xl mx-auto px-4 pb-24">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {features.map((f, i) => (
-            <motion.div
-              key={f.title}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 * i }}
+      {/* ── 功能导航 ── */}
+      <section className="max-w-5xl mx-auto px-5 pb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {NAV.map(link => (
+            <a
+              key={link.href}
+              href={link.href}
+              className="group flex items-center gap-3 p-4 rounded border border-border bg-[hsl(var(--bg-surface))] hover:border-border/80 transition-colors"
             >
-              <Card className="h-full bg-card/50 border-border/50 hover:border-primary/30 transition-colors">
-                <CardContent className="p-5">
-                  <div className="w-9 h-9 rounded-lg bg-accent flex items-center justify-center mb-3">
-                    <f.icon className="w-4 h-4 text-primary" />
-                  </div>
-                  <h3 className="text-sm font-medium mb-1.5">{f.title}</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{f.desc}</p>
-                </CardContent>
-              </Card>
-            </motion.div>
+              <link.icon className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+              <div>
+                <div className="text-sm font-medium">{link.label}</div>
+                <div className="text-[11px] text-muted-foreground">{link.desc}</div>
+              </div>
+              <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/40 ml-auto group-hover:text-muted-foreground transition-colors" />
+            </a>
+          ))}
+        </div>
+      </section>
+
+      {/* ── 能力说明 ── */}
+      <section className="max-w-5xl mx-auto px-5 pb-24">
+        <div className="mb-6">
+          <p className="text-[11px] text-muted-foreground tracking-widest uppercase mb-1">核心功能</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          {FEATURES.map(f => (
+            <div key={f.title} className="p-4 rounded border border-border bg-[hsl(var(--bg-surface))]">
+              <f.icon className="w-4 h-4 text-muted-foreground mb-3" />
+              <h3 className="text-sm font-medium mb-1">{f.title}</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">{f.desc}</p>
+            </div>
           ))}
         </div>
       </section>

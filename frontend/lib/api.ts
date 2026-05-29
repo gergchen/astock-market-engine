@@ -1,11 +1,23 @@
 /** 统一 API 配置 + 类型化客户端 */
 
-import type { MarketScores, StockScores, StockScoresQuery } from "./types"
+import type { MarketScores, StockScores, StockScoresQuery, SystemStatusResponse } from "./types"
 
-// 优先级：环境变量 > 同源代理 > 本地默认
-export const API_BASE =
-  (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_BASE_URL) ||
-  "http://127.0.0.1:8000"
+const DEFAULT_PORT = "8005"
+
+const getApiBase = () => {
+  // 1. 环境变量（构建时注入）
+  if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_BASE_URL) {
+    return process.env.NEXT_PUBLIC_API_BASE_URL
+  }
+  // 2. 运行时动态 hostname（支持局域网访问）
+  if (typeof window !== "undefined") {
+    return `http://${window.location.hostname}:${DEFAULT_PORT}`
+  }
+  // 3. SSR fallback
+  return `http://127.0.0.1:${DEFAULT_PORT}`
+}
+
+export const API_BASE = getApiBase()
 
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -20,7 +32,6 @@ async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  // ── V8 结构化评分 ──
   getMarketScores(): Promise<MarketScores> {
     return fetchJSON<MarketScores>("/api/analysis/market-scores")
   },
@@ -32,7 +43,6 @@ export const api = {
     })
   },
 
-  // ── 盘面端点 ──
   getMarketReview(): Promise<{
     market_scores: MarketScores
     limit_up_count: number
@@ -59,5 +69,9 @@ export const api = {
 
   getSectorRotation(): Promise<Record<string, unknown>> {
     return fetchJSON("/api/analysis/sector-rotation")
+  },
+
+  getSystemStatus(): Promise<SystemStatusResponse> {
+    return fetchJSON<SystemStatusResponse>("/api/stock/system/status")
   },
 }

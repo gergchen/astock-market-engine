@@ -2,21 +2,24 @@
 
 import { Suspense, useState, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
 import {
-  ArrowLeft, Search, TrendingUp, TrendingDown,
-  AlertTriangle, Loader2, BarChart3, CandlestickChart,
+  Search, TrendingUp, TrendingDown,
+  AlertTriangle, Loader2, BarChart3,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import KLineChart from '@/components/KLineChart'
+import AnalysisView from '@/components/AnalysisView'
+import SystemStatusBar from '@/components/SystemStatusBar'
+import MockWarningBanner from '@/components/MockWarningBanner'
 import LimitUpCard from '@/components/LimitUpCard'
 import LimitDownCard from '@/components/LimitDownCard'
-import ExpectationGapCard from '@/components/ExpectationGapCard'
 import AITooltip from '@/components/AITooltip'
+import AppHeader from '@/components/AppHeader'
 import { API_BASE, api } from '@/lib/api'
+import { useSystemStatus } from '@/components/SystemStatusProvider'
 import type { StockScores } from '@/lib/types'
 import { capitalStageColor, confidenceColor } from '@/lib/types'
 
@@ -24,7 +27,7 @@ export default function StockPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
       </div>
     }>
       <StockPageContent />
@@ -43,6 +46,8 @@ interface StockSummary {
   low: number
   market_cap?: number
   pe?: number
+  open?: number
+  prev_close?: number
 }
 
 interface KLineRecord {
@@ -61,7 +66,17 @@ interface AnalysisResult {
   data_points: number
   kline_data?: KLineRecord[]
   is_mock_data?: boolean
+  is_degraded?: boolean
 }
+
+const navLinks = [
+  { href: '/', label: '首页' },
+  { href: '/market', label: '大盘' },
+  { href: '/review', label: '复盘' },
+  { href: '/workbench', label: '工作台' },
+  { href: '/backtest', label: '回测' },
+  { href: '/strategies', label: '策略' },
+]
 
 function StockPageContent() {
   const searchParams = useSearchParams()
@@ -75,12 +90,10 @@ function StockPageContent() {
   const [error, setError] = useState('')
   const [limitUpResult, setLimitUpResult] = useState<any>(null)
   const [limitDownResult, setLimitDownResult] = useState<any>(null)
-  const [gapResult, setGapResult] = useState<any>(null)
+  const { isMock } = useSystemStatus()
 
   useEffect(() => {
-    if (symbol) {
-      fetchAnalysis(symbol)
-    }
+    if (symbol) fetchAnalysis(symbol)
   }, [symbol])
 
   const fetchAnalysis = async (code: string) => {
@@ -89,9 +102,7 @@ function StockPageContent() {
     setResult(null)
     setLimitUpResult(null)
     setLimitDownResult(null)
-    setGapResult(null)
     try {
-      // 优先尝试 AI 综合分析；失败时（无 key / 网络问题）自动降级到本地规则引擎
       const aiRes = await fetch(`${API_BASE}/api/analysis/stock`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -114,14 +125,12 @@ function StockPageContent() {
       }
       setResult(data)
 
-      // V8 结构化评分
       try {
         const sc = await api.getStockScores({ symbol: code })
         setScores(sc)
       } catch { setScores(null) }
 
-      // 并发获取涨停/跌停分析
-      const [upRes, downRes, gapRes] = await Promise.all([
+      const [upRes, downRes] = await Promise.all([
         fetch(`${API_BASE}/api/analysis/limit-up`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -132,15 +141,9 @@ function StockPageContent() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ symbol: code }),
         }),
-        fetch(`${API_BASE}/api/analysis/expectation-gap`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ symbol: code }),
-        }),
       ])
       if (upRes.ok) setLimitUpResult(await upRes.json())
       if (downRes.ok) setLimitDownResult(await downRes.json())
-      if (gapRes.ok) setGapResult(await gapRes.json())
     } catch (e: any) {
       setError(e.message || '请求失败，请确认后端服务已启动')
     } finally {
@@ -162,195 +165,155 @@ function StockPageContent() {
     return v.toFixed(0)
   }
 
-  const renderAnalysis = (text: string) => {
-    const html = text
-      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-      .replace(/^- (.+)$/gm, '<li>$1</li>')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\n\n/g, '</p><p>')
-      .replace(/\n/g, '<br/>')
-    return (
-      <div
-        className="analysis-content leading-relaxed"
-        dangerouslySetInnerHTML={{ __html: `<p>${html}</p>` }}
-      />
-    )
-  }
-
   return (
     <div className="min-h-screen">
-      <header className="border-b border-border/50 sticky top-0 bg-background/80 backdrop-blur-lg z-10">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-4">
-          <button onClick={() => router.push('/')} className="text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <form onSubmit={handleSubmit} className="flex-1 flex gap-2 max-w-md">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                value={inputSymbol}
-                onChange={(e) => setInputSymbol(e.target.value)}
-                placeholder="输入股票代码"
-                className="pl-9 h-9 bg-muted border-0"
-              />
-            </div>
-            <Button type="submit" size="sm">分析</Button>
-          </form>
-        </div>
-      </header>
+      <AppHeader
+        title="AStock"
+        icon={
+          <div className="w-6 h-6 rounded bg-primary flex items-center justify-center text-[10px] font-bold text-primary-foreground">
+            A
+          </div>
+        }
+        showBack
+        backHref="/"
+        navItems={navLinks.filter(l => l.href !== '/')}
+        statusBar={<SystemStatusBar />}
+      />
 
-      <main className="max-w-4xl mx-auto px-4 py-6">
+      <main className="max-w-4xl mx-auto px-4 pt-6 pb-8">
+        {/* Search bar */}
+        <form onSubmit={handleSubmit} className="flex gap-2 mb-6">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input
+              value={inputSymbol}
+              onChange={(e) => setInputSymbol(e.target.value)}
+              placeholder="输入股票代码"
+              className="pl-8 h-9 text-xs"
+            />
+          </div>
+          <Button type="submit" size="sm" className="h-9 text-xs">分析</Button>
+        </form>
+
         {loading && (
-          <div className="flex flex-col items-center justify-center py-24">
-            <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-            <p className="text-sm text-muted-foreground">正在分析数据...</p>
+          <div className="flex flex-col items-center justify-center py-32">
+            <Loader2 className="w-6 h-6 animate-spin text-primary mb-3" />
+            <p className="text-xs text-muted-foreground">正在分析数据...</p>
           </div>
         )}
 
         {error && (
-          <Card className="bg-destructive/5 border-destructive/20">
-            <CardContent className="p-6 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+          <Card className="border-destructive/20">
+            <CardContent className="p-5 flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
               <div>
-                <p className="font-medium text-sm mb-1">分析出错</p>
-                <p className="text-sm text-muted-foreground">{error}</p>
+                <p className="text-xs font-medium mb-0.5">分析出错</p>
+                <p className="text-xs text-muted-foreground">{error}</p>
               </div>
             </CardContent>
           </Card>
         )}
 
         {result && !loading && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
-          >
-            {result.is_mock_data && (
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 flex items-start gap-2 text-sm">
-                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-amber-500 mb-0.5">数据不可用 — 使用模拟数据</p>
-                  <p className="text-muted-foreground">
-                    当前未能获取到真实行情数据（akshare 请求失败），展示的是系统生成的模拟数据，仅供参考，<strong>不构成任何投资依据</strong>。
-                  </p>
-                </div>
-              </div>
-            )}
+          <div className="space-y-5">
+            {result.is_mock_data && <MockWarningBanner />}
 
-            <Card className="bg-gradient-to-br from-card to-card/50 border-border/50">
-              <CardContent className="p-6">
+            {/* 摘要卡片 */}
+            <Card>
+              <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1.5">
                       <AITooltip symbol={symbol} query="comprehensive">
-                        <h1 className="text-xl font-bold cursor-help hover:text-primary transition-colors">
+                        <h1 className="text-lg font-bold cursor-help hover:text-primary transition-colors">
                           {result.summary.name}
                         </h1>
                       </AITooltip>
-                      <span className="text-sm text-muted-foreground">{result.summary.symbol}</span>
+                      <span className="text-xs text-muted-foreground">{result.summary.symbol}</span>
                       {result.is_mock_data && (
-                        <Badge variant="outline" className="text-amber-500 border-amber-500/40 text-xs">模拟</Badge>
+                        <Badge variant="outline" className="text-amber-500 border-amber-500/40 text-[10px]">模拟</Badge>
                       )}
                     </div>
                     <div className="flex items-baseline gap-3">
-                      <span className="text-3xl font-bold tracking-tight">
+                      <span className="text-2xl font-bold tracking-tight font-mono">
                         {formatPrice(result.summary.close)}
                       </span>
-                      <span className={`text-lg font-medium ${result.summary.pct_change >= 0 ? 'up' : 'down'}`}>
+                      <span className={`text-sm font-medium font-mono ${result.summary.pct_change >= 0 ? 'text-up' : 'text-down'}`}>
                         {result.summary.pct_change >= 0 ? '+' : ''}{result.summary.pct_change.toFixed(2)}%
                       </span>
+                      <Badge variant={result.summary.pct_change >= 0 ? 'up' : 'down'} className="text-[10px] px-2 py-0">
+                        {result.summary.pct_change >= 0 ? <TrendingUp className="w-3 h-3 mr-0.5" /> : <TrendingDown className="w-3 h-3 mr-0.5" />}
+                        {result.summary.pct_change >= 0 ? '上涨' : '下跌'}
+                      </Badge>
                     </div>
                   </div>
-                  <Badge variant={result.summary.pct_change >= 0 ? 'up' : 'down'} className="text-sm px-3 py-1">
-                    {result.summary.pct_change >= 0 ? <TrendingUp className="w-3.5 h-3.5 mr-1" /> : <TrendingDown className="w-3.5 h-3.5 mr-1" />}
-                    {result.summary.pct_change >= 0 ? '上涨' : '下跌'}
-                  </Badge>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <div className="text-muted-foreground text-xs mb-0.5">最高</div>
-                    <div className="font-medium">{formatPrice(result.summary.high)}</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground text-xs mb-0.5">最低</div>
-                    <div className="font-medium">{formatPrice(result.summary.low)}</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground text-xs mb-0.5">成交量</div>
-                    <div className="font-medium">{formatVol(result.summary.volume)}</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground text-xs mb-0.5">换手率</div>
-                    <div className="font-medium">{result.summary.turnover?.toFixed(2)}%</div>
-                  </div>
+                <div className="grid grid-cols-4 md:grid-cols-7 gap-3 text-xs">
+                  <DataItem label="最高" value={formatPrice(result.summary.high)} valueClass={result.summary.high > result.summary.close ? 'text-up' : 'text-down'} />
+                  <DataItem label="最低" value={formatPrice(result.summary.low)} valueClass={result.summary.low < result.summary.close ? 'text-down' : 'text-up'} />
+                  <DataItem label="今开" value={formatPrice(result.summary.open ?? 0)} />
+                  <DataItem label="昨收" value={formatPrice(result.summary.prev_close ?? 0)} />
+                  <DataItem label="成交量" value={formatVol(result.summary.volume)} />
+                  <DataItem label="换手率" value={result.summary.turnover?.toFixed(2) + '%'} />
+                  <DataItem label="市值" value={result.summary.market_cap ? (result.summary.market_cap / 1e8).toFixed(1) + '亿' : '--'} />
                 </div>
               </CardContent>
             </Card>
 
-            {/* 涨停/跌停分析 */}
+            {/* 涨停/跌停/预期差 */}
             {limitUpResult?.analysis?.is_limit_up && (
-              <LimitUpCard
-                analysis={limitUpResult.analysis}
-                symbol={limitUpResult.symbol}
-                name={limitUpResult.name}
-              />
+              <LimitUpCard analysis={limitUpResult.analysis} symbol={limitUpResult.symbol} name={limitUpResult.name} />
             )}
             {limitDownResult?.analysis?.is_limit_down && (
-              <LimitDownCard
-                analysis={limitDownResult.analysis}
-                symbol={limitDownResult.symbol}
-                name={limitDownResult.name}
-              />
+              <LimitDownCard analysis={limitDownResult.analysis} symbol={limitDownResult.symbol} name={limitDownResult.name} />
             )}
 
-            {/* 预期差分析 */}
-            {gapResult?.analysis?.has_gap && (
-              <ExpectationGapCard
-                analysis={gapResult.analysis}
-                symbol={gapResult.symbol}
-                name={gapResult.name}
-              />
-            )}
-
-            {/* K线图 */}
+            {/* K线 */}
             <KLineChart
               symbol={symbol}
               name={result.summary.name}
+              isMock={result.is_mock_data || isMock}
               phase={
                 scores?.main_capital?.stage === '主升' ? 'zhupan' :
                 scores?.main_capital?.stage === '吸筹' ? 'xichou' :
                 scores?.main_capital?.stage === '洗盘' ? 'xipan' :
                 scores?.main_capital?.stage === '出货' ? 'chuhuo' : 'unknown'
               }
-              apiBase="http://127.0.0.1:8000"
+              apiBase={API_BASE}
             />
 
-            {/* V8 结构化评分 */}
-            {scores && <ScoreCard scores={scores} />}
+            {/* 评分 + AI 分析 */}
+            {result.is_degraded ? (
+              <Card className="border-amber-500/20">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-500" />
+                    <CardTitle className="text-sm">系统状态</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <AnalysisView text={result.analysis} />
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {scores && <ScoreCard scores={scores} />}
+                <AnalysisView text={result.analysis} />
+              </>
+            )}
 
-            <Card className="border-border/50">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <BrainIcon className="w-4 h-4 text-primary" />
-                  <CardTitle className="text-base">AI 认知分析</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {renderAnalysis(result.analysis)}
-              </CardContent>
-            </Card>
-
-            <div className="text-center text-xs text-muted-foreground pb-8">
-              基于 {result.data_points} 个交易日数据 · 不构成投资建议
+            <div className="text-center text-[10px] text-muted-foreground pb-6">
+              {result.is_mock_data
+                ? '当前无法获取真实行情数据，系统已降级'
+                : `基于 ${result.data_points} 个交易日数据 · 不构成投资建议`}
             </div>
-          </motion.div>
+          </div>
         )}
 
         {!symbol && !loading && !error && (
-          <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
-            <BarChart3 className="w-12 h-12 mb-4 opacity-30" />
-            <p className="text-sm">输入股票代码开始分析</p>
+          <div className="flex flex-col items-center justify-center py-32 text-muted-foreground">
+            <BarChart3 className="w-10 h-10 mb-3 opacity-30" />
+            <p className="text-xs">输入股票代码开始分析</p>
           </div>
         )}
       </main>
@@ -358,44 +321,51 @@ function StockPageContent() {
   )
 }
 
+function DataItem({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
+  return (
+    <div>
+      <div className="text-[10px] text-muted-foreground mb-0.5">{label}</div>
+      <div className={`text-xs font-medium font-mono ${valueClass ?? 'text-foreground/90'}`}>{value}</div>
+    </div>
+  )
+}
+
 function ScoreCard({ scores }: { scores: StockScores }) {
   const { main_capital, technical, composite } = scores
   return (
-    <Card className="border-border/50">
+    <Card className="border-border">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
           <BarChart3 className="w-4 h-4 text-primary" />
-          <CardTitle className="text-base">V8 结构化评分</CardTitle>
+          <CardTitle className="text-sm">综合评分</CardTitle>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* 综合评分 */}
-        <div className="flex items-center justify-between p-3 rounded-lg bg-accent/20">
-          <span className="text-sm text-muted-foreground">综合评分</span>
-          <span className="text-2xl font-bold" style={{
-            color: composite >= 60 ? '#3FB950' : composite >= 30 ? '#F0883E' : '#F85149'
-          }}>{composite}<span className="text-sm text-muted-foreground">/100</span></span>
+        <div className="flex items-center justify-between p-3 rounded bg-accent/20">
+          <span className="text-xs text-muted-foreground">综合评分</span>
+          <span className="text-xl font-bold font-mono" style={{
+            color: composite >= 60 ? 'hsl(var(--up))' : composite >= 30 ? '#F0883E' : 'hsl(var(--down))'
+          }}>{composite}<span className="text-xs text-muted-foreground">/100</span></span>
         </div>
 
-        {/* 主力行为 */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-muted-foreground">主力行为</span>
+            <span className="text-[10px] text-muted-foreground">主力行为</span>
             <Badge style={{
               background: capitalStageColor(main_capital.stage) + '22',
               color: capitalStageColor(main_capital.stage)
-            }}>{main_capital.stage}</Badge>
+            }} className="text-[10px]">{main_capital.stage}</Badge>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+            <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
               <div className="h-full rounded-full transition-all" style={{
                 width: `${main_capital.score}%`,
                 background: capitalStageColor(main_capital.stage),
               }} />
             </div>
-            <span className="text-xs font-mono text-muted-foreground">{main_capital.score}</span>
+            <span className="text-[11px] font-mono text-muted-foreground">{main_capital.score}</span>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">{main_capital.advice}</p>
+          <p className="text-[11px] text-muted-foreground mt-2">{main_capital.advice}</p>
           {main_capital.factors?.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
               {main_capital.factors.map((f, i) => (
@@ -405,9 +375,8 @@ function ScoreCard({ scores }: { scores: StockScores }) {
           )}
         </div>
 
-        {/* 技术面 */}
         <div>
-          <div className="text-xs text-muted-foreground mb-2">技术面</div>
+          <div className="text-[10px] text-muted-foreground mb-2">技术面</div>
           <div className="space-y-2">
             {[
               { label: '趋势', score: technical.trend_score, max: 40 },
@@ -415,13 +384,14 @@ function ScoreCard({ scores }: { scores: StockScores }) {
               { label: '位置', score: technical.position_score, max: 30 },
             ].map(item => (
               <div key={item.label} className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground w-8">{item.label}</span>
-                <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                  <div className="h-full rounded-full bg-[#58A6FF]" style={{
-                    width: `${(item.score / item.max) * 100}%`
+                <span className="text-[10px] text-muted-foreground w-6">{item.label}</span>
+                <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full rounded-full" style={{
+                    width: `${(item.score / item.max) * 100}%`,
+                    background: 'hsl(220, 100%, 65%)',
                   }} />
                 </div>
-                <span className="text-xs font-mono text-muted-foreground">{item.score}</span>
+                <span className="text-[11px] font-mono text-muted-foreground">{item.score}</span>
               </div>
             ))}
           </div>
@@ -434,10 +404,9 @@ function ScoreCard({ scores }: { scores: StockScores }) {
           )}
         </div>
 
-        {/* 置信度 */}
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
           <span>置信度</span>
-          <span className="px-2 py-0.5 rounded" style={{
+          <span className="px-2 py-0.5 rounded text-[10px]" style={{
             background: confidenceColor(main_capital.confidence) + '22',
             color: confidenceColor(main_capital.confidence),
           }}>{main_capital.confidence}</span>
@@ -447,13 +416,5 @@ function ScoreCard({ scores }: { scores: StockScores }) {
   )
 }
 
-function BrainIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 4a4 4 0 0 1 3.5 2.1 6 6 0 0 1 3.5 0 4 4 0 0 1 0 7.8 6 6 0 0 1-3.5 0A4 4 0 0 1 12 20a4 4 0 0 1-3.5-2.1 6 6 0 0 1-3.5 0 4 4 0 0 1 0-7.8 6 6 0 0 1 3.5 0A4 4 0 0 1 12 4Z" />
-      <path d="M12 4v16" />
-      <path d="M8 8v8" />
-      <path d="M16 8v8" />
-    </svg>
-  )
-}
+
+

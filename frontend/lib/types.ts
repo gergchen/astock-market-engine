@@ -102,3 +102,26 @@ export function capitalStageColor(stage: string): string {
   }
   return map[stage] ?? "#6b7280"
 }
+
+// ── 数据质量类型 ──
+
+export interface QualityInfo {
+  source: string
+  confidence: number
+  realtime: boolean
+  fallback_used: boolean
+}
+
+export type SystemStatusType = "realtime" | "cache" | "stale" | "mock" | "unknown"
+
+export interface SystemStatusResponse {
+  status: SystemStatusType
+  sources: Array<{
+    name: string
+    source: string
+    confidence: number
+    realtime: boolean
+    fallback_used: boolean
+  }>
+  updated_at: string
+}

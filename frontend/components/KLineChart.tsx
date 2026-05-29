@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface KLineBar {
@@ -19,15 +19,16 @@ interface KLineChartProps {
   name: string
   phase?: 'xichou' | 'xipan' | 'zhupan' | 'chuhuo' | 'unknown'
   apiBase?: string
+  isMock?: boolean
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PHASE_CONFIG = {
   xichou:  { label: '吸筹阶段', bg: '#2A1E3A', color: '#BC8EF0' },
   xipan:   { label: '洗盘阶段', bg: '#1E2A3A', color: '#58A6FF' },
-  zhupan:  { label: '主升阶段', bg: '#1A3A27', color: '#3FB950' },
-  chuhuo:  { label: '出货阶段', bg: '#3A1E1E', color: '#F85149' },
-  unknown: { label: '阶段未知', bg: '#21262D', color: '#8B949E' },
+  zhupan:  { label: '主升阶段', bg: '#1A3A27', color: 'hsl(var(--down))' },
+  chuhuo:  { label: '出货阶段', bg: '#3A1E1E', color: 'hsl(var(--up))' },
+  unknown: { label: '阶段未知', bg: 'hsl(var(--border))', color: 'hsl(var(--muted-foreground))' },
 }
 
 const PERIODS = [
@@ -38,12 +39,23 @@ const PERIODS = [
 ]
 
 const MA_CONFIG = [
-  { n: 5,  color: '#F0883E', key: 'ma5'  },
+  { n: 5,  color: '#D4943A', key: 'ma5'  },
   { n: 20, color: '#58A6FF', key: 'ma20' },
   { n: 60, color: '#BC8EF0', key: 'ma60' },
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+function cssVar(name: string): string {
+  if (typeof document === 'undefined') return ''
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
+function cssHsl(name: string): string {
+  const val = cssVar(name)
+  if (!val) return 'hsl(var(--up))'
+  return `hsl(${val})`
+}
+
 function calcMA(data: KLineBar[], n: number): (number | null)[] {
   return data.map((_, i) => {
     if (i < n - 1) return null
@@ -88,16 +100,16 @@ function generateMockData(days: number): KLineBar[] {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 function StatCard({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{ padding: '10px 14px', borderRight: '1px solid #21262D' }}>
+    <div style={{ padding: '10px 14px', borderRight: '1px solid hsl(var(--border))' }}>
       <div style={{ fontSize: 11, color: '#6E7681', marginBottom: 3 }}>{label}</div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: color ?? '#E6EDF3',
+      <div style={{ fontSize: 13, fontWeight: 600, color: color ?? 'hsl(var(--foreground))',
         fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
     </div>
   )
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = '' }: KLineChartProps) {
+export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = '', isMock = false }: KLineChartProps) {
   const mainRef = useRef<HTMLCanvasElement>(null)
   const volRef  = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -112,6 +124,10 @@ export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = 
   const [showVol, setShowVol] = useState(true)
 
   const phaseConf = PHASE_CONFIG[phase]
+
+  // 从设计系统 CSS 变量读取涨跌色（用于渲染层）
+  const upColor = cssHsl('--up') || 'hsl(var(--up))'
+  const downColor = cssHsl('--down') || 'hsl(var(--down))'
 
   // ── Fetch data ──────────────────────────────────────────────────────────────
   const fetchData = useCallback(async (p: string) => {
@@ -150,12 +166,18 @@ export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = 
     const mctx = mc.getContext('2d'); const vctx = vc.getContext('2d')
     if (!mctx || !vctx) return
 
+    // 从 CSS 变量读取涨跌色，与设计系统保持一致
+    const UP_COLOR = cssHsl('--up')
+    const DOWN_COLOR = cssHsl('--down')
+
     const W = mc.width, H = mc.height
     const VW = vc.width, VH = vc.height
     const n = data.length
-    const PAD = { l: 8, r: 72, t: 20, b: 30 }
+    // scale = canvas像素 / CSS像素 (通常=2 在Retina屏)
+    const scale = Math.round(W / mc.offsetWidth) || 1
+    const PAD = { l: 8 * scale, r: 72 * scale, t: 20 * scale, b: 30 * scale }
     const cw = (W - PAD.l - PAD.r) / n
-    const bw = Math.max(2, cw * 0.55)
+    const bw = Math.max(2 * scale, cw * 0.55)
 
     mctx.clearRect(0, 0, W, H)
     vctx.clearRect(0, 0, VW, VH)
@@ -166,14 +188,18 @@ export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = 
     const py = (p: number) => PAD.t + (pMax - p) / (pMax - pMin) * (H - PAD.t - PAD.b)
 
     // Grid lines + price labels
-    mctx.strokeStyle = '#21262D'; mctx.lineWidth = 1
+    mctx.strokeStyle = 'hsl(var(--border))'; mctx.lineWidth = 1
     for (let i = 0; i <= 4; i++) {
       const y = PAD.t + i * (H - PAD.t - PAD.b) / 4
       mctx.beginPath(); mctx.moveTo(PAD.l, y); mctx.lineTo(W - PAD.r, y); mctx.stroke()
       const p = pMax - (pMax - pMin) * i / 4
-      const isUp = p >= data[0].close
-      mctx.fillStyle = isUp ? '#3FB950' : '#F85149'
-      mctx.font = '20px JetBrains Mono, monospace'
+      if (!isMock) {
+        const isUp = p >= data[0].close
+        mctx.fillStyle = isUp ? UP_COLOR : DOWN_COLOR
+      } else {
+        mctx.fillStyle = '#6E7681'
+      }
+      mctx.font = '20px JetBarChart3s Mono, monospace'
       mctx.textAlign = 'left'
       mctx.fillText(p.toFixed(1), W - PAD.r + 10, y + 7)
     }
@@ -182,14 +208,15 @@ export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = 
     data.forEach((d, i) => {
       const x = PAD.l + i * cw + cw / 2
       const up = d.close >= d.open
-      const col = up ? '#3FB950' : '#F85149'
+      const col = isMock ? '#555' : (up ? UP_COLOR : DOWN_COLOR)
+      const wickCol = isMock ? '#444' : col
 
       if (i === hovered) {
         mctx.fillStyle = 'rgba(255,255,255,0.05)'
         mctx.fillRect(PAD.l + i * cw, PAD.t, cw, H - PAD.t - PAD.b)
       }
       // Wick
-      mctx.strokeStyle = col; mctx.lineWidth = i === hovered ? 3 : 2
+      mctx.strokeStyle = wickCol; mctx.lineWidth = i === hovered ? 3 : 2
       mctx.beginPath(); mctx.moveTo(x, py(d.high)); mctx.lineTo(x, py(d.low)); mctx.stroke()
       // Body
       const oy = py(d.open), cy = py(d.close)
@@ -198,8 +225,8 @@ export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = 
       mctx.fillRect(x - bw / 2, by2, bw, bh)
     })
 
-    // MA lines
-    if (showMA) {
+    // MA lines (hidden in mock mode)
+    if (showMA && !isMock) {
       MA_CONFIG.forEach(({ n: mn, color }) => {
         const ma = calcMA(data, mn)
         mctx.strokeStyle = color; mctx.lineWidth = 2; mctx.beginPath()
@@ -214,6 +241,17 @@ export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = 
       })
     }
 
+    // Mock watermark
+    if (isMock) {
+      mctx.save()
+      mctx.fillStyle = 'rgba(255,255,255,0.06)'
+      mctx.font = 'bold 36px sans-serif'
+      mctx.textAlign = 'center'
+      mctx.textBaseline = 'middle'
+      mctx.fillText('模拟数据', W / 2, H / 2)
+      mctx.restore()
+    }
+
     // Crosshair
     if (hovered >= 0) {
       const x = PAD.l + hovered * cw + cw / 2
@@ -222,30 +260,34 @@ export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = 
       mctx.beginPath(); mctx.moveTo(x, PAD.t); mctx.lineTo(x, H - PAD.b); mctx.stroke()
       mctx.setLineDash([])
       // Date label
-      mctx.fillStyle = '#30363D'; mctx.fillRect(x - 40, H - PAD.b + 2, 80, 22)
-      mctx.fillStyle = '#8B949E'; mctx.font = '18px JetBrains Mono, monospace'
+      mctx.fillStyle = 'hsl(var(--border))'; mctx.fillRect(x - 40, H - PAD.b + 2, 80, 22)
+      mctx.fillStyle = 'hsl(var(--muted-foreground))'; mctx.font = '18px JetBarChart3s Mono, monospace'
       mctx.textAlign = 'center'
       mctx.fillText(data[hovered].date.slice(5), x, H - PAD.b + 16)
     }
 
-    // Volume
+    // Volume (gray in mock mode)
     if (showVol) {
       const vols = data.map(d => d.volume)
       const vMax = Math.max(...vols)
-      const VP = { l: 8, r: 72, t: 6, b: 18 }
-      vctx.strokeStyle = '#21262D'; vctx.lineWidth = 1
+      const VP = { l: 8 * scale, r: 72 * scale, t: 6 * scale, b: 18 * scale }
+      vctx.strokeStyle = 'hsl(var(--border))'; vctx.lineWidth = 1
       vctx.beginPath(); vctx.moveTo(VP.l, VP.t); vctx.lineTo(VW - VP.r, VP.t); vctx.stroke()
       data.forEach((d, i) => {
         const x = VP.l + i * cw + cw / 2
         const h = (VH - VP.t - VP.b) * (d.volume / vMax)
-        vctx.fillStyle = d.close >= d.open ? 'rgba(63,185,80,0.65)' : 'rgba(248,81,73,0.65)'
+        if (isMock) {
+          vctx.fillStyle = 'rgba(100,100,100,0.5)'
+        } else {
+          vctx.fillStyle = d.close >= d.open ? 'rgba(248,81,73,0.55)' : 'rgba(63,185,80,0.55)'
+        }
         vctx.fillRect(x - bw / 2, VH - VP.b - h, bw, h)
       })
       // Vol label
-      vctx.fillStyle = '#6E7681'; vctx.font = '18px JetBrains Mono, monospace'; vctx.textAlign = 'left'
+      vctx.fillStyle = '#6E7681'; vctx.font = '18px JetBarChart3s Mono, monospace'; vctx.textAlign = 'left'
       vctx.fillText((vMax / 10000).toFixed(0) + '万', VW - VP.r + 10, VP.t + 14)
     }
-  }, [data, hovered, showMA, showVol])
+  }, [data, hovered, showMA, showVol, isMock])
 
   // ── Resize observer ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -268,20 +310,24 @@ export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = 
 
   useEffect(() => { draw() }, [draw])
 
-  // ── Mouse interaction ───────────────────────────────────────────────────────
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const mc = mainRef.current; if (!mc || data.length === 0) return
+  // ── Mouse / Touch interaction ────────────────────────────────────────────────
+  const getHoverIndex = useCallback((clientX: number) => {
+    const mc = mainRef.current; if (!mc || data.length === 0) return -1
     const rect = mc.getBoundingClientRect()
-    const x = e.clientX - rect.left
+    const x = clientX - rect.left
     const PAD = { l: 8, r: 72 }
     const cw = (mc.offsetWidth - PAD.l - PAD.r) / data.length
     const idx = Math.floor((x - PAD.l) / cw)
-    if (idx >= 0 && idx < data.length) {
-      setHovered(idx); setHoveredBar(data[idx])
-    }
+    if (idx >= 0 && idx < data.length) return idx
+    return -1
   }, [data])
 
-  const handleMouseLeave = useCallback(() => {
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const idx = getHoverIndex(e.clientX)
+    if (idx >= 0) { setHovered(idx); setHoveredBar(data[idx]) }
+  }, [data, getHoverIndex])
+
+  const handlePointerLeave = useCallback(() => {
     setHovered(-1); setHoveredBar(null)
   }, [])
 
@@ -296,25 +342,21 @@ export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = 
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
-      style={{
-        background: '#0D1117',
+    <div style={{
+        background: 'hsl(var(--bg-elevated))',
         borderRadius: 12,
-        border: '1px solid #21262D',
+        border: '1px solid hsl(var(--border))',
         overflow: 'hidden',
         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
       }}
     >
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 18px 12px', borderBottom: '1px solid #21262D' }}>
+        padding: '14px 18px 12px', borderBottom: '1px solid hsl(var(--border))' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: '#E6EDF3' }}>{name}</span>
-            <span style={{ fontSize: 12, color: '#8B949E' }}>{symbol}</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: 'hsl(var(--foreground))' }}>{name}</span>
+            <span style={{ fontSize: 12, color: 'hsl(var(--muted-foreground))' }}>{symbol}</span>
             <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
               background: phaseConf.bg, color: phaseConf.color }}>
               {phaseConf.label}
@@ -322,13 +364,13 @@ export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = 
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
             <span style={{ fontSize: 24, fontWeight: 700,
-              color: dayPct >= 0 ? '#3FB950' : '#F85149' }}>
+              color: dayPct >= 0 ? upColor : downColor }}>
               {last ? fmt(last.close) : '---'}
             </span>
             {last && (
               <span style={{ fontSize: 13, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
-                background: dayPct >= 0 ? '#1A3A27' : '#3A1E1E',
-                color: dayPct >= 0 ? '#3FB950' : '#F85149' }}>
+                background: dayPct >= 0 ? '#3A1E1E' : '#1A3A27',
+                color: dayPct >= 0 ? upColor : downColor }}>
                 {dayPct >= 0 ? '+' : ''}{fmt(dayPct)}%
               </span>
             )}
@@ -337,14 +379,14 @@ export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = 
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
           {/* Period tabs */}
-          <div style={{ display: 'flex', gap: 2, background: '#161B22',
+          <div style={{ display: 'flex', gap: 2, background: 'hsl(var(--bg-surface))',
             borderRadius: 6, padding: 3 }}>
             {PERIODS.map(p => (
               <button key={p.value} onClick={() => setPeriod(p.value)}
                 style={{ padding: '4px 10px', fontSize: 12, borderRadius: 4, border: 'none',
                   cursor: 'pointer', transition: 'all 0.15s',
-                  background: period === p.value ? '#21262D' : 'transparent',
-                  color: period === p.value ? '#E6EDF3' : '#8B949E' }}>
+                  background: period === p.value ? 'hsl(var(--border))' : 'transparent',
+                  color: period === p.value ? 'hsl(var(--foreground))' : 'hsl(var(--muted-foreground))' }}>
                 {p.label}
               </button>
             ))}
@@ -355,8 +397,8 @@ export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = 
               ['VOL', showVol, () => setShowVol(v => !v)]].map(([label, active, toggle]) => (
               <button key={label as string} onClick={toggle as () => void}
                 style={{ padding: '3px 9px', fontSize: 11, borderRadius: 4, border: 'none',
-                  cursor: 'pointer', background: active ? '#21262D' : 'transparent',
-                  color: active ? '#E6EDF3' : '#6E7681' }}>
+                  cursor: 'pointer', background: active ? 'hsl(var(--border))' : 'transparent',
+                  color: active ? 'hsl(var(--foreground))' : '#6E7681' }}>
                 {label as string}
               </button>
             ))}
@@ -366,22 +408,21 @@ export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = 
 
       {/* ── MA Indicator bar ── */}
       <div style={{ display: 'flex', gap: 16, padding: '8px 18px',
-        borderBottom: '1px solid #21262D', alignItems: 'center' }}>
+        borderBottom: '1px solid hsl(var(--border))', alignItems: 'center' }}>
         {MA_CONFIG.map(({ n: mn, color, key }, i) => (
           <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <div style={{ width: 10, height: 2, borderRadius: 1, background: color }} />
             <span style={{ fontSize: 11, color }}>MA{mn}</span>
-            <span style={{ fontSize: 11, color: '#8B949E' }}>
+            <span style={{ fontSize: 11, color: 'hsl(var(--muted-foreground))' }}>
               {mas[i] ? fmt(mas[i]!) : '--'}
             </span>
           </div>
         ))}
 
         {/* Hovered bar info */}
-        <AnimatePresence>
+        
           {hoveredBar && (
-            <motion.div key="hbar" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }} transition={{ duration: 0.12 }}
+            <div key="hbar"
               style={{ marginLeft: 'auto', display: 'flex', gap: 14, fontSize: 11 }}>
               {[
                 ['开', hoveredBar.open],
@@ -389,62 +430,68 @@ export default function KLineChart({ symbol, name, phase = 'unknown', apiBase = 
                 ['低', hoveredBar.low],
                 ['收', hoveredBar.close],
               ].map(([l, v]) => (
-                <span key={l as string} style={{ color: '#8B949E' }}>
+                <span key={l as string} style={{ color: 'hsl(var(--muted-foreground))' }}>
                   {l as string}<span style={{
                     marginLeft: 3, fontWeight: 600,
-                    color: (v as number) >= hoveredBar.open ? '#3FB950' : '#F85149'
+                    color: (v as number) >= hoveredBar.open ? upColor : downColor
                   }}>{fmt(v as number)}</span>
                 </span>
               ))}
-              <span style={{ color: '#8B949E' }}>
-                量<span style={{ marginLeft: 3, color: '#E6EDF3' }}>
+              <span style={{ color: 'hsl(var(--muted-foreground))' }}>
+                量<span style={{ marginLeft: 3, color: 'hsl(var(--foreground))' }}>
                   {(hoveredBar.volume / 10000).toFixed(1)}万
                 </span>
               </span>
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
+        
       </div>
 
       {/* ── Chart canvas ── */}
-      <div ref={wrapRef} style={{ position: 'relative', background: '#0D1117' }}>
+      <div ref={wrapRef} style={{ position: 'relative', background: 'hsl(var(--bg-elevated))' }}>
         {loading && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex',
             alignItems: 'center', justifyContent: 'center', zIndex: 10,
             background: 'rgba(13,17,23,0.85)' }}>
-            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+            <div
               style={{ width: 24, height: 24, borderRadius: '50%',
-                border: '2px solid #21262D', borderTop: '2px solid #3FB950' }} />
+                border: '2px solid hsl(var(--border))', borderTop: '2px solid hsl(var(--down))' }} />
           </div>
         )}
         {error && (
           <div style={{ position: 'absolute', top: 8, right: 18, zIndex: 10,
-            fontSize: 11, color: '#F0883E', background: '#2A1E10',
+            fontSize: 11, color: '#D4943A', background: '#2A1E10',
             padding: '3px 8px', borderRadius: 4 }}>
             {error}
           </div>
         )}
         <canvas ref={mainRef}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          style={{ display: 'block', cursor: 'crosshair' }} />
+          onPointerMove={handlePointerMove}
+          onPointerLeave={handlePointerLeave}
+          style={{ display: 'block', cursor: 'crosshair', touchAction: 'none' }}
+          role="img"
+          aria-label={`${name}(${symbol}) K线图`} />
         {showVol && (
           <canvas ref={volRef}
-            style={{ display: 'block', borderTop: '1px solid #21262D' }} />
+            style={{ display: 'block', borderTop: '1px solid hsl(var(--border))' }} />
         )}
       </div>
 
       {/* ── Stats row ── */}
       {last && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)',
-          borderTop: '1px solid #21262D' }}>
+          borderTop: '1px solid hsl(var(--border))' }}>
           <StatCard label="今开" value={fmt(last.open)} />
-          <StatCard label="最高" value={fmt(last.high)} color="#3FB950" />
-          <StatCard label="最低" value={fmt(last.low)}  color="#F85149" />
+          <StatCard label="最高" value={fmt(last.high)} color="hsl(var(--down))" />
+          <StatCard label="最低" value={fmt(last.low)}  color="hsl(var(--up))" />
           <StatCard label="成交量" value={(last.volume / 10000).toFixed(1) + '万手'} />
           <StatCard label="换手率" value={last.turnover ? fmt(last.turnover) + '%' : '--'} />
         </div>
       )}
-    </motion.div>
+    </div>
   )
 }
+
+
+
+

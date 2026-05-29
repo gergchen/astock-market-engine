@@ -2,22 +2,16 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
-import { ArrowLeft, Trophy, TrendingUp, BarChart3, Loader2, Shield } from 'lucide-react'
+import { Trophy, TrendingUp, BarChart3, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import AppHeader from '@/components/AppHeader'
 import { API_BASE } from '@/lib/api'
 
 interface Ranking {
-  symbol: string
-  name: string
-  strategy: string
-  strategy_key: string
-  total_return: number
-  sharpe_ratio: number
-  win_rate: number
-  max_drawdown: number
-  total_trades: number
+  symbol: string; name: string; strategy: string; strategy_key: string
+  total_return: number; sharpe_ratio: number; win_rate: number
+  max_drawdown: number; total_trades: number
 }
 
 const SORT_OPTIONS = [
@@ -50,40 +44,30 @@ export default function StrategyMarketPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-border/50">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-4">
-          <button onClick={() => router.push('/')} className="text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <span className="font-semibold text-sm">策略市场</span>
-        </div>
-      </header>
+      <AppHeader title="策略市场" icon={<TrendingUp className="w-4 h-4 text-muted-foreground" />} />
 
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
         {loading ? (
           <div className="flex justify-center py-24">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
           </div>
         ) : (
           <>
-            {/* Top 3 podium */}
             {top3.length > 0 && (
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 {top3.map((r, i) => {
-                  const medals = ['#FFD700', '#C0C0C0', '#CD7F32']
-                  const icons = [Trophy, Trophy, Trophy]
-                  const Icon = icons[i]
+                  const medals = ['#D4943A', '#8B8B8B', '#A0724E']
                   return (
-                    <Card key={`${r.symbol}-${r.strategy_key}`} className="border-border/50 overflow-hidden">
+                    <Card key={`${r.symbol}-${r.strategy_key}`}>
                       <CardContent className="p-4 text-center">
-                        <div className="w-8 h-8 rounded-full mx-auto mb-2 flex items-center justify-center"
-                          style={{ background: medals[i] + '22' }}>
-                          <Icon className="w-4 h-4" style={{ color: medals[i] }} />
+                        <div className="w-7 h-7 rounded mx-auto mb-2 flex items-center justify-center"
+                          style={{ background: medals[i] + '18' }}>
+                          <Trophy className="w-3.5 h-3.5" style={{ color: medals[i] }} />
                         </div>
                         <div className="text-sm font-semibold">{r.name}</div>
-                        <div className="text-xs text-muted-foreground">{r.symbol} · {r.strategy}</div>
+                        <div className="text-[11px] text-muted-foreground">{r.symbol} · {r.strategy}</div>
                         <div className="mt-2 flex items-center justify-center gap-3 text-xs">
-                          <span className="text-[#3FB950] font-mono font-semibold">
+                          <span className="text-up font-mono font-semibold">
                             {(r.total_return >= 0 ? '+' : '')}{(r.total_return * 100).toFixed(1)}%
                           </span>
                           <span className="text-muted-foreground">夏普 {r.sharpe_ratio.toFixed(2)}</span>
@@ -95,65 +79,59 @@ export default function StrategyMarketPage() {
               </div>
             )}
 
-            {/* Sort controls */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">排序：</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-muted-foreground mr-1">排序</span>
               {SORT_OPTIONS.map(opt => (
                 <button key={opt.key} onClick={() => setSortBy(opt.key)}
-                  className={`px-3 py-1.5 rounded-md text-xs transition-all ${
-                    sortBy === opt.key ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+                  className={`px-2.5 py-1 rounded text-xs transition-colors ${
+                    sortBy === opt.key ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'
                   }`}>
                   {opt.label}
                 </button>
               ))}
             </div>
 
-            {/* Rankings table */}
-            <Card className="border-border/50">
+            <Card>
               <CardContent className="p-0">
-                <table className="w-full text-sm">
+                <table className="data-table">
                   <thead>
-                    <tr className="border-b border-border/50 text-muted-foreground text-xs">
-                      <th className="text-left px-4 py-3 font-medium w-10">#</th>
-                      <th className="text-left px-4 py-3 font-medium">股票</th>
-                      <th className="text-left px-4 py-3 font-medium">策略</th>
-                      <th className="text-right px-4 py-3 font-medium">收益率</th>
-                      <th className="text-right px-4 py-3 font-medium">夏普比</th>
-                      <th className="text-right px-4 py-3 font-medium">胜率</th>
-                      <th className="text-right px-4 py-3 font-medium">最大回撤</th>
-                      <th className="text-right px-4 py-3 font-medium">交易</th>
+                    <tr>
+                      <th className="w-10">#</th><th>股票</th><th>策略</th>
+                      <th className="text-right">收益率</th><th className="text-right">夏普比</th>
+                      <th className="text-right">胜率</th><th className="text-right">最大回撤</th>
+                      <th className="text-right">交易</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rankings.map((r, i) => (
                       <tr key={`${r.symbol}-${r.strategy_key}`}
-                        className="border-b border-border/30 hover:bg-accent/20 transition-colors cursor-pointer"
+                        className="cursor-pointer"
                         onClick={() => router.push(`/backtest?symbol=${r.symbol}&strategy=${r.strategy_key}`)}>
-                        <td className="px-4 py-3 text-muted-foreground font-mono">
+                        <td className="font-mono">
                           {i + 1 <= 3 ? (
-                            <span style={{ color: ['#FFD700', '#C0C0C0', '#CD7F32'][i] }}>{i + 1}</span>
+                            <span style={{ color: ['#D4943A', '#8B8B8B', '#A0724E'][i] }}>{i + 1}</span>
                           ) : i + 1}
                         </td>
-                        <td className="px-4 py-3">
+                        <td>
                           <div className="font-medium">{r.name}</div>
-                          <div className="text-xs text-muted-foreground">{r.symbol}</div>
+                          <div className="text-[11px] text-muted-foreground">{r.symbol}</div>
                         </td>
-                        <td className="px-4 py-3">
+                        <td>
                           <Badge variant="outline" className="text-[10px]">{r.strategy}</Badge>
                         </td>
-                        <td className={`px-4 py-3 text-right font-mono font-semibold ${r.total_return >= 0 ? 'text-[#3FB950]' : 'text-[#F85149]'}`}>
+                        <td className={`text-right font-mono font-semibold ${r.total_return >= 0 ? 'text-up' : 'text-down'}`}>
                           {(r.total_return >= 0 ? '+' : '')}{(r.total_return * 100).toFixed(1)}%
                         </td>
-                        <td className={`px-4 py-3 text-right font-mono ${r.sharpe_ratio >= 1 ? 'text-[#3FB950]' : r.sharpe_ratio >= 0.5 ? 'text-[#EAB308]' : 'text-muted-foreground'}`}>
+                        <td className={`text-right font-mono ${r.sharpe_ratio >= 1 ? 'text-up' : r.sharpe_ratio >= 0.5 ? 'text-amber-400' : 'text-muted-foreground'}`}>
                           {r.sharpe_ratio.toFixed(2)}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-muted-foreground">
+                        <td className="text-right font-mono text-muted-foreground">
                           {(r.win_rate * 100).toFixed(0)}%
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-[#F0883E]">
+                        <td className="text-right font-mono text-down">
                           {(r.max_drawdown * 100).toFixed(1)}%
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-muted-foreground">{r.total_trades}</td>
+                        <td className="text-right font-mono text-muted-foreground">{r.total_trades}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -161,9 +139,8 @@ export default function StrategyMarketPage() {
               </CardContent>
             </Card>
 
-            {/* Footer */}
-            <div className="text-center text-xs text-muted-foreground pb-8">
-              * 基于历史K线的纯规则回测，不构成未来收益保证
+            <div className="text-center text-[11px] text-muted-foreground pb-8">
+              基于历史K线的纯规则回测，不构成未来收益保证
             </div>
           </>
         )}
