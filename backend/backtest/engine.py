@@ -1,10 +1,10 @@
 """回测引擎核心 — 信号 → 交易 → 绩效评估"""
-from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
 import math
+from dataclasses import dataclass, field
+from typing import Any
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from .strategies import get_strategy
 
@@ -38,15 +38,15 @@ class BacktestResult:
     sharpe_ratio: float           # 夏普比率
     avg_pnl: float                # 平均单笔收益
     avg_hold_days: float          # 平均持仓天数
-    trades: List[dict] = field(default_factory=list)
-    equity_curve: List[dict] = field(default_factory=list)  # [{date, value}]
+    trades: list[dict] = field(default_factory=list)
+    equity_curve: list[dict] = field(default_factory=list)  # [{date, value}]
 
 
 def run_backtest(
     df: pd.DataFrame,
     symbol: str,
     strategy_name: str = "ma_cross",
-    strategy_params: Optional[Dict[str, Any]] = None,
+    strategy_params: dict[str, Any] | None = None,
     initial_capital: float = 100_000,
     commission_rate: float = 0.0003,  # 万三手续费
 ) -> BacktestResult:

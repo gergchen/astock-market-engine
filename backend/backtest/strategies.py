@@ -3,7 +3,8 @@
 每个策略是一个函数: (df, params) → List[signal]
   signal: {"date": index, "action": "buy"|"sell", "price": float, "reason": str}
 """
-from typing import List, Dict, Any, Callable
+from typing import Any
+
 import pandas as pd
 
 
@@ -11,7 +12,7 @@ def _sma(series: pd.Series, n: int) -> pd.Series:
     return series.rolling(n).mean()
 
 
-def ma_cross(df: pd.DataFrame, params: Dict[str, Any]) -> List[dict]:
+def ma_cross(df: pd.DataFrame, params: dict[str, Any]) -> list[dict]:
     """均线金叉/死叉策略
     params: {"fast": 5, "slow": 20}
     金叉买入，死叉卖出
@@ -38,7 +39,7 @@ def ma_cross(df: pd.DataFrame, params: Dict[str, Any]) -> List[dict]:
     return signals
 
 
-def volume_breakout(df: pd.DataFrame, params: Dict[str, Any]) -> List[dict]:
+def volume_breakout(df: pd.DataFrame, params: dict[str, Any]) -> list[dict]:
     """放量突破策略
     params: {"vol_ratio": 1.5, "price_pct": 0.03, "hold_days": 5}
     成交量>均量*ratio 且当日涨幅>pct 时买入，持有hold_days天后卖出
@@ -68,7 +69,7 @@ def volume_breakout(df: pd.DataFrame, params: Dict[str, Any]) -> List[dict]:
     return signals
 
 
-def dragon_follow(df: pd.DataFrame, params: Dict[str, Any]) -> List[dict]:
+def dragon_follow(df: pd.DataFrame, params: dict[str, Any]) -> list[dict]:
     """龙头跟随策略
     params: {"trailing_stop": 0.05, "entry_pct": 0.05}
     连续上涨>entry_pct后追入，回撤>trailing_stop止盈
@@ -101,7 +102,7 @@ def dragon_follow(df: pd.DataFrame, params: Dict[str, Any]) -> List[dict]:
 
 
 # 策略注册表
-STRATEGIES: Dict[str, dict] = {
+STRATEGIES: dict[str, dict] = {
     "ma_cross": {
         "name": "均线交叉",
         "fn": ma_cross,

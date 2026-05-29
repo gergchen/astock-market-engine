@@ -3,9 +3,10 @@
 整合行情数据、资金流向、主力行为识别、情绪判断，
 生成完整的大白话个股分析报告。
 """
-from typing import Dict, Any, Optional
-from backend.agents.main_capital_agent import MainCapitalAgent
+from typing import Any
+
 from backend.agents.emotion_cycle_agent import EmotionCycleAgent
+from backend.agents.main_capital_agent import MainCapitalAgent
 
 
 class StockAnalysisAgent:
@@ -15,7 +16,7 @@ class StockAnalysisAgent:
         self.capital_agent = MainCapitalAgent()
         self.emotion_agent = EmotionCycleAgent()
 
-    def analyze(self, df, fund_flow: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze(self, df, fund_flow: dict[str, Any]) -> dict[str, Any]:
         """综合分析一只股票"""
         if df.empty:
             return {"error": "无数据"}
@@ -59,7 +60,7 @@ class StockAnalysisAgent:
             "fund_flow": fund_flow,
         }
 
-    def generate_report(self, stock_name: str, symbol: str, analysis: Dict[str, Any]) -> str:
+    def generate_report(self, stock_name: str, symbol: str, analysis: dict[str, Any]) -> str:
         """生成大白话报告"""
         if "error" in analysis:
             return f"## {stock_name} 分析\n\n数据不足，无法分析。"

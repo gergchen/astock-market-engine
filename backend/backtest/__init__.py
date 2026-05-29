@@ -3,7 +3,7 @@
 策略规则 → 历史K线数据 → 模拟交易 → 收益曲线 + 风险指标。
 纯数值计算，不依赖外部 API。
 """
-from .engine import run_backtest, BacktestResult, Trade
+from .engine import BacktestResult, Trade, run_backtest
 from .strategies import STRATEGIES, get_strategy
 
 __all__ = ["run_backtest", "BacktestResult", "Trade", "STRATEGIES", "get_strategy"]

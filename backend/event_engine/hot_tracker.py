@@ -1,15 +1,14 @@
 """热词追踪 — 统计词频趋势 + 热门话题发现"""
 from collections import Counter, defaultdict
 from datetime import datetime
-from typing import List, Dict
-from .event_types import HotTopic, NewsItem
-from .event_extractor import extract_keywords, get_affected_sectors
-from .news_fetcher import fetch_finance_news
-from .concept_mapper import concept_to_sectors, concept_to_stocks
 
+from .concept_mapper import concept_to_stocks
+from .event_extractor import extract_keywords, get_affected_sectors
+from .event_types import HotTopic, NewsItem
+from .news_fetcher import fetch_finance_news
 
 # 窗口内热词计数
-_HISTORY: Dict[str, Counter] = defaultdict(Counter)  # date → Counter[word]
+_HISTORY: dict[str, Counter] = defaultdict(Counter)  # date → Counter[word]
 _MAX_HISTORY = 7  # 保留 7 天
 
 
@@ -21,7 +20,7 @@ def _cleanup_history():
         dates = dates[1:]
 
 
-def _record_keywords(news_list: List[NewsItem]):
+def _record_keywords(news_list: list[NewsItem]):
     """记录当日词频"""
     today = datetime.now().strftime("%Y-%m-%d")
     counter = _HISTORY[today]
@@ -33,7 +32,7 @@ def _record_keywords(news_list: List[NewsItem]):
     _cleanup_history()
 
 
-def get_trending_topics(top_k: int = 15) -> List[HotTopic]:
+def get_trending_topics(top_k: int = 15) -> list[HotTopic]:
     """获取当前热门话题（今日词频 Top + 趋势判断）"""
     news_list = fetch_finance_news(limit=80)
     _record_keywords(news_list)
@@ -81,7 +80,7 @@ def get_trending_topics(top_k: int = 15) -> List[HotTopic]:
     return topics
 
 
-def get_word_trend(word: str) -> Dict:
+def get_word_trend(word: str) -> dict:
     """获取单个词的趋势数据"""
     trend_data = {}
     for date in sorted(_HISTORY.keys()):

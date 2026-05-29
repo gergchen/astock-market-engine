@@ -5,11 +5,11 @@
 输出: MarketScores (结构化的 0-100 分数)
 """
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 from backend.feature_engine.market_features import MarketFeatures
-from .score_utils import range_score, normalize_score, confidence_label, to_int_score, weighted_sum
 
+from .score_utils import confidence_label, range_score
 
 # ── 情绪周期六阶段定义（与 EmotionCycleAgent 保持一致）──
 _EMOTION_STAGES = [
@@ -43,8 +43,8 @@ class EmotionScores:
     score: int              # 0-100（主升期最高）
     stage: str              # 阶段名
     confidence: str         # 高/中/低
-    all_stage_scores: Dict[str, float] = field(default_factory=dict)
-    signals: List[str] = field(default_factory=list)
+    all_stage_scores: dict[str, float] = field(default_factory=dict)
+    signals: list[str] = field(default_factory=list)
     suggestion: str = ""
 
 
@@ -54,7 +54,7 @@ class DragonIntensityScores:
     score: int              # 0-100
     top_leader_score: float = 0   # 总龙头得分（满分100）
     high_board_count: int = 0     # 连板 ≥5 的股数
-    top_leaders: List[Dict[str, Any]] = field(default_factory=list)
+    top_leaders: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -62,7 +62,7 @@ class RiskScores:
     """风险评分（0-100，越高越危险）"""
     score: int
     level: str             # 低/中/高/极高
-    factors: List[str] = field(default_factory=list)
+    factors: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -73,7 +73,7 @@ class MarketScores:
     risk: RiskScores
     computed_at: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "emotion": {
                 "score": self.emotion.score,
@@ -111,7 +111,7 @@ def compute_emotion_scores(mf: MarketFeatures) -> EmotionScores:
 
     best_stage = _EMOTION_STAGES[0]
     best_score = -1.0
-    all_scores: Dict[str, float] = {}
+    all_scores: dict[str, float] = {}
 
     for s in _EMOTION_STAGES:
         score = 0.0
@@ -175,7 +175,7 @@ def compute_dragon_intensity(mf: MarketFeatures) -> DragonIntensityScores:
     max_board = int(boards_series.max())
 
     # 行业涨停分布 → 板块集中度评分
-    sector_counts: Dict[str, int] = {}
+    sector_counts: dict[str, int] = {}
     for ind in pool.get("所属行业", []):
         ind_s = str(ind)
         if ind_s and ind_s != "nan":
@@ -210,7 +210,7 @@ def compute_dragon_intensity(mf: MarketFeatures) -> DragonIntensityScores:
 
 def compute_risk_scores(mf: MarketFeatures, emotion_stage: str) -> RiskScores:
     """计算市场风险评分"""
-    factors: List[str] = []
+    factors: list[str] = []
     risk_base = 30  # 基础风险分
 
     # 情绪极端 → 风险升高

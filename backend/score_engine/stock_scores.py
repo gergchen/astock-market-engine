@@ -5,14 +5,14 @@
 输出: StockScores (结构化 0-100 分数)
 """
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 from backend.feature_engine.stock_features import StockFeatures
-from .score_utils import normalize_score, confidence_label, to_int_score
 
+from .score_utils import confidence_label
 
 # ── 主力四阶段规则（与 MainCapitalAgent 完全一致）──
-_CAPITAL_MAX = {"吸筹": 5, "洗盘": 5, "主升": 5, "出货": 5}
+_CAPITAL_MAX = {"吸筹": 6, "洗盘": 5, "主升": 6, "出货": 6}
 
 # 阶段 → 0-100 映射（主升=100，出货=0，吸筹/洗盘居中偏上）
 _CAPITAL_SCORE_MAP = {"主升": 90, "吸筹": 70, "洗盘": 50, "出货": 15}
@@ -31,8 +31,8 @@ class MainCapitalScores:
     score: int                      # 0-100（主升=90，出货=15）
     stage: str                      # 吸筹/洗盘/主升/出货
     confidence: str                 # 高/中/低
-    all_stage_scores: Dict[str, float] = field(default_factory=dict)
-    factors: List[str] = field(default_factory=list)
+    all_stage_scores: dict[str, float] = field(default_factory=dict)
+    factors: list[str] = field(default_factory=list)
     advice: str = ""
 
 
@@ -43,7 +43,7 @@ class TechnicalScores:
     trend_score: int                # 趋势分（均线位置）
     volume_score: int               # 量能分
     position_score: int             # 位置分
-    factors: List[str] = field(default_factory=list)
+    factors: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -55,7 +55,7 @@ class StockScores:
     technical: TechnicalScores
     composite: int = 0              # 综合评分 0-100
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "symbol": self.symbol,
             "name": self.name,
@@ -88,15 +88,16 @@ def compute_capital_scores(sf: StockFeatures) -> MainCapitalScores:
     close = sf.close
     low = sf.low
 
-    scores: Dict[str, float] = {}
-    all_factors: Dict[str, List[str]] = {}
+    scores: dict[str, float] = {}
+    all_factors: dict[str, list[str]] = {}
 
-    # ── 吸筹 (满分5) ──
+    # ── 吸筹 (满分6: K线5 + 资金流向1) ──
     s = 0; r = []
     if pr < 0.9: s += 1; r.append("股价低于60日均价90%，处于低位")
     if vr < 1.2: s += 1; r.append("量能温和，未异常放量")
     if 1 <= turnover <= 3: s += 1; r.append(f"换手率{turnover:.1f}%，温和换手")
     if pct > 0 and (high - close) < (close - low): s += 1; r.append("收盘接近最高价，有下影线")
+    if sf.main_flow > 0: s += 1; r.append(f"主力净流入{sf.main_flow:.0f}万，资金支持吸筹判断")
     scores["吸筹"] = s / _CAPITAL_MAX["吸筹"]
     all_factors["吸筹"] = r
 
@@ -109,22 +110,25 @@ def compute_capital_scores(sf: StockFeatures) -> MainCapitalScores:
     scores["洗盘"] = s / _CAPITAL_MAX["洗盘"]
     all_factors["洗盘"] = r
 
-    # ── 主升 (满分5) ──
+    # ── 主升 (满分6: K线5 + 资金流向1) ──
     s = 0; r = []
     if pr >= 1.05: s += 1; r.append("股价站上60日均线，突破前高")
     if vr >= 1.5: s += 1; r.append("成交量高于20日均量150%")
     if pct > 0: s += 1; r.append("今日上涨")
     if turnover > 3: s += 1; r.append(f"换手率{turnover:.1f}%，交易活跃")
     if close > 0 and (high - low) / close < 0.06: s += 1; r.append("振幅适中，上涨稳健")
+    if sf.main_flow > 0: s += 1; r.append(f"主力净流入{sf.main_flow:.0f}万")
     scores["主升"] = s / _CAPITAL_MAX["主升"]
     all_factors["主升"] = r
 
-    # ── 出货 (满分5) ──
+    # ── 出货 (满分6: K线4 + 资金流向1 + 趋势跌幅1) ──
     s = 0; r = []
     if pr >= 1.3: s += 1; r.append(f"累计涨幅{sf.cum_gain_60d or 0:.1f}%，处于高位")
     if vr > 1.5 and pct < 1: s += 1; r.append("放量滞涨，量价背离")
     if turnover > 5: s += 1; r.append(f"换手率{turnover:.1f}%>5%，筹码大量交换")
     if pct < -3: s += 1; r.append(f"跌幅{pct:.1f}%，有出货迹象")
+    if sf.main_flow < 0: s += 1; r.append(f"主力净流出{abs(sf.main_flow):.0f}万")
+    if pct < 0 and sf.main_flow < -500: s += 1; r.append("下跌+主力大幅流出，出货特征明显")
     scores["出货"] = s / _CAPITAL_MAX["出货"]
     all_factors["出货"] = r
 
@@ -147,7 +151,7 @@ def compute_capital_scores(sf: StockFeatures) -> MainCapitalScores:
 
 def compute_technical_scores(sf: StockFeatures) -> TechnicalScores:
     """技术面评分"""
-    factors: List[str] = []
+    factors: list[str] = []
 
     # ── 趋势分 (0-40) — 基于均线位置 ──
     trend = 20

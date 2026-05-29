@@ -5,14 +5,13 @@
   - stock/{symbol}: 个股实时行情 (3s 推送)
 """
 import asyncio
-import json
-from typing import Dict, Set
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
 # 频道订阅管理
-_subscribers: Dict[str, Set[WebSocket]] = {
+_subscribers: dict[str, set[WebSocket]] = {
     "market": set(),
 }
 
@@ -43,8 +42,10 @@ async def _broadcast(channel: str, data: dict):
 async def _market_pusher():
     """每 5s 推送大盘数据"""
     from backend.services import (
-        get_market_overview, get_all_limit_up_today,
-        get_zhaban_rate, get_top_boards,
+        get_all_limit_up_today,
+        get_market_overview,
+        get_top_boards,
+        get_zhaban_rate,
     )
     while True:
         try:

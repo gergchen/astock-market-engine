@@ -1,14 +1,37 @@
 """股票数据路由"""
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
 from backend.services import (
-    get_stock_daily, get_stock_fund_flow, get_stock_name,
-    get_realtime_quote, get_limit_up_pool, get_limit_down_pool,
-    get_sector_fund_flow, get_market_overview,
-    get_all_limit_up_today, get_lhb_detail
+    classify_system_status,
+    get_all_limit_up_today,
+    get_lhb_detail,
+    get_limit_down_pool,
+    get_limit_up_pool,
+    get_market_overview,
+    get_realtime_quote,
+    get_sector_fund_flow,
+    get_stock_daily,
+    get_stock_fund_flow,
+    get_stock_name,
 )
 
 router = APIRouter(prefix="/api/stock", tags=["股票数据"])
+
+
+import re
+
+_STOCK_CODE_RE = re.compile(r"^\d{6}$")
+
+def _validate_symbol(symbol: str) -> str:
+    """校验股票代码格式"""
+    symbol = symbol.strip()
+    if not _STOCK_CODE_RE.match(symbol):
+        from fastapi import HTTPException
+        raise HTTPException(400, f"股票代码格式错误: {symbol}，应为6位数字")
+    return symbol
 
 
 class StockQuery(BaseModel):
@@ -18,7 +41,8 @@ class StockQuery(BaseModel):
 @router.post("/daily")
 def stock_daily(query: StockQuery):
     """获取个股日K数据"""
-    df = get_stock_daily(query.symbol)
+    symbol = _validate_symbol(query.symbol)
+    df = get_stock_daily(symbol)
     if df.empty:
         raise HTTPException(404, f"未找到股票 {query.symbol} 的数据")
     return {
@@ -31,7 +55,8 @@ def stock_daily(query: StockQuery):
 @router.post("/realtime")
 def stock_realtime(query: StockQuery):
     """获取个股实时行情"""
-    data = get_realtime_quote(query.symbol)
+    symbol = _validate_symbol(query.symbol)
+    data = get_realtime_quote(symbol)
     if not data:
         raise HTTPException(404, f"未找到股票 {query.symbol}")
     return {"symbol": query.symbol, **data}
@@ -40,7 +65,8 @@ def stock_realtime(query: StockQuery):
 @router.post("/fund-flow")
 def stock_fund_flow(query: StockQuery):
     """获取个股资金流向"""
-    data = get_stock_fund_flow(query.symbol)
+    symbol = _validate_symbol(query.symbol)
+    data = get_stock_fund_flow(symbol)
     return {"symbol": query.symbol, "fund_flow": data}
 
 
@@ -91,3 +117,30 @@ def limit_up_count():
     """获取今日涨停总数"""
     count = get_all_limit_up_today()
     return {"count": count}
+
+
+@router.get("/system/status")
+def system_status():
+    """查询系统整体数据健康状态 (realtime/cache/stale/mock)"""
+
+    daily = get_stock_daily("600519")
+    dq = daily.attrs.get("_quality")
+
+    quote = get_realtime_quote("600519")
+    qd = quote.get("_quality", {})
+
+    sources = []
+    if dq:
+        sources.append({"name": "stock_daily", **dq.to_dict()})
+    if qd:
+        sources.append({"name": "realtime_quote", **qd})
+
+    status = classify_system_status(dq)
+
+    return {
+        "status": status,
+        "sources": sources,
+        "updated_at": datetime.now().isoformat(),
+    }
+
+

@@ -2,8 +2,8 @@
 
 import hashlib
 import re
-from typing import List, Set
-from .event_types import NewsItem, Event
+
+from .event_types import Event, NewsItem
 
 # ── 政策关键词 ──
 _POLICY_KEYWORDS = [
@@ -40,14 +40,14 @@ _POSITIVE_WORDS = ["利好", "超预期", "增长", "突破", "获批", "中标"
 _NEGATIVE_WORDS = ["利空", "下降", "亏损", "处罚", "调查", "暴雷", "减持", "跌停"]
 
 
-def _segment_chinese(text: str) -> List[str]:
+def _segment_chinese(text: str) -> list[str]:
     """简单中文分词（无 jieba 依赖）
 
     使用标点符号切分 + 常见2-4字词提取。
     安装 jieba 后自动升级为 jieba 分词。
     """
     # 按标点切分
-    segments = re.split(r'[，。、；：！？\s,.;:!?\[\]()（）""''【】《》\-\|/]+', text)
+    segments = re.split(r'[，。、；：！？\s,.;:!?\[\]()（）""'r'【】《》\-\|/]+', text)
     words = []
     for seg in segments:
         seg = seg.strip()
@@ -64,9 +64,9 @@ def _segment_chinese(text: str) -> List[str]:
     return words
 
 
-def extract_keywords(text: str, max_kw: int = 8) -> List[str]:
+def extract_keywords(text: str, max_kw: int = 8) -> list[str]:
     """从文本中提取关键词"""
-    found: Set[str] = set()
+    found: set[str] = set()
     text_lower = text.lower()
 
     # 1. 匹配政策关键词
@@ -111,7 +111,7 @@ def classify_event(text: str) -> str:
     return "市场"
 
 
-def get_affected_sectors(text: str) -> List[str]:
+def get_affected_sectors(text: str) -> list[str]:
     """识别受影响的板块"""
     sectors = []
     for concept_name, aliases in _CONCEPT_SECTOR_MAP.items():

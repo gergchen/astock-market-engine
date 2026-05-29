@@ -2,7 +2,7 @@
 
 基于文档第二十章的量化标准，使用多维加权评分判断市场情绪阶段。
 """
-from typing import Dict, Any, Optional
+from typing import Any
 
 
 class EmotionCycleAgent:
@@ -63,10 +63,10 @@ class EmotionCycleAgent:
         self,
         limit_up_count: int,
         limit_down_count: int = 0,
-        zhaban_rate: Optional[float] = None,
-        high_board_count: Optional[int] = None,
-        volume: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        zhaban_rate: float | None = None,
+        high_board_count: int | None = None,
+        volume: float | None = None,
+    ) -> dict[str, Any]:
         """判断当前情绪周期阶段 — 多维加权评分
 
         若 zhaban_rate / high_board_count 缺失，对应维度均分处理，
@@ -91,8 +91,8 @@ class EmotionCycleAgent:
         self,
         up_count: int,
         down_count: int,
-        zhaban_rate: Optional[float],
-        high_board: Optional[int],
+        zhaban_rate: float | None,
+        high_board: int | None,
     ) -> tuple:
         """多维加权评分确定阶段
 
@@ -110,7 +110,7 @@ class EmotionCycleAgent:
 
         best_score = -1.0
         best_stage = self.STAGES[0]
-        all_scores: Dict[str, float] = {}
+        all_scores: dict[str, float] = {}
 
         for s in self.STAGES:
             score = 0.0

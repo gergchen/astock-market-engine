@@ -1,6 +1,6 @@
 """个股评分 API 契约"""
+
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional
 
 
 class StockScoresQuery(BaseModel):
@@ -13,8 +13,8 @@ class MainCapitalScoresResponse(BaseModel):
     score: int = Field(..., description="0-100，主升=90，出货=15")
     stage: str = Field(..., description="阶段：吸筹/洗盘/主升/出货")
     confidence: str = Field(..., description="置信度：高/中/低")
-    all_stage_scores: Dict[str, float] = Field(default_factory=dict, description="四阶段匹配分")
-    factors: List[str] = Field(default_factory=list, description="判断依据")
+    all_stage_scores: dict[str, float] = Field(default_factory=dict, description="四阶段匹配分")
+    factors: list[str] = Field(default_factory=list, description="判断依据")
     advice: str = Field("", description="操作建议")
 
 
@@ -24,7 +24,7 @@ class TechnicalScoresResponse(BaseModel):
     trend_score: int = Field(..., description="趋势分 0-40")
     volume_score: int = Field(..., description="量能分 0-30")
     position_score: int = Field(..., description="位置分 0-30")
-    factors: List[str] = Field(default_factory=list, description="技术面信号")
+    factors: list[str] = Field(default_factory=list, description="技术面信号")
 
 
 class StockScoresResponse(BaseModel):

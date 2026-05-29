@@ -1,25 +1,44 @@
 """AI 分析路由"""
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from backend.services import (
-    get_stock_daily, get_stock_fund_flow, get_stock_name,
-    get_realtime_quote, pop_mock_used,
-)
-from backend.services.analysis_service import analyze_stock, _local_rule_analysis
-from limit_up_analysis import LimitUpAgent
-from limit_down_analysis import LimitDownAgent
-from market_reasoning_engine import ExpectationGapAgent
-from review_engine import MarketReviewAgent
-from dragon_leader_engine import DragonLeaderAgent
-from sector_rotation_engine import SectorRotationAgent
-from backend.services.db_service import get_review_history, get_snapshot_by_date
+
 from backend.schemas import (
     MarketScoresResponse,
     StockScoresResponse,
+)
+from backend.schemas import (
     StockScoresQuery as StockScoresQuerySchema,
 )
+from backend.services import (
+    get_realtime_quote,
+    get_stock_daily,
+    get_stock_fund_flow,
+    get_stock_name,
+    pop_mock_used,
+    set_system_quality,
+)
+from backend.services.analysis_service import _local_rule_analysis, analyze_stock, degraded_analysis
+from backend.services.db_service import get_review_history, get_snapshot_by_date
+from dragon_leader_engine import DragonLeaderAgent
+from limit_down_analysis import LimitDownAgent
+from limit_up_analysis import LimitUpAgent
+from market_reasoning_engine import ExpectationGapAgent
+from review_engine import MarketReviewAgent
+from sector_rotation_engine import SectorRotationAgent
 
 router = APIRouter(prefix="/api/analysis", tags=["AI分析"])
+
+
+import re
+
+_STOCK_CODE_RE = re.compile(r"^\d{6}$")
+
+def _validate_symbol(symbol: str) -> str:
+    symbol = symbol.strip()
+    if not _STOCK_CODE_RE.match(symbol):
+        from fastapi import HTTPException
+        raise HTTPException(400, f"股票代码格式错误: {symbol}，应为6位数字")
+    return symbol
 
 
 class AnalysisQuery(BaseModel):
@@ -30,48 +49,126 @@ class AnalysisQuery(BaseModel):
 @router.get("/kline/{symbol}")
 def kline_data(symbol: str, period: str = "3m"):
     """返回个股日K线数据（供前端 KLineChart 使用）"""
-    period_days = {"5d": 5, "1m": 30, "3m": 90, "1y": 250}
+    period_days = {"1d": 20, "5d": 5, "1m": 30, "3m": 90, "1y": 250}
     days = period_days.get(period, 90)
 
     df = get_stock_daily(symbol)
     if df.empty:
         raise HTTPException(404, f"未找到股票 {symbol} 的数据")
 
-    recent = df.tail(days)
-    return {"data": recent.to_dict(orient="records"), "symbol": symbol}
+    recent = df.tail(days).copy()
+    records = recent.to_dict(orient="records")
+
+    # 追加今日实时行情作为最新一根未完成 K 线
+    try:
+        quote = get_realtime_quote(symbol)
+        if quote and quote.get("最新价", 0) > 0:
+            last_bar_date = str(records[-1].get("date", ""))[:10] if records else ""
+            today = __import__("datetime").datetime.now().strftime("%Y-%m-%d")
+            if last_bar_date != today:
+                records.append({
+                    "date": today,
+                    "open": float(quote.get("今开", 0)),
+                    "close": float(quote["最新价"]),
+                    "high": float(quote.get("最高", 0)),
+                    "low": float(quote.get("最低", 0)),
+                    "volume": int(float(quote.get("成交量", 0))),
+                    "amount": float(quote.get("成交额", 0)),
+                    "turnover": float(quote.get("换手率", 0)),
+                    "pct_change": float(quote.get("涨跌幅", 0)),
+                    "change": float(quote.get("涨跌额", 0)),
+                })
+    except Exception as e:
+        __import__("logging").getLogger("analysis").warning("追加今日K线失败: %s", e)
+
+    quality = df.attrs.get("_quality")
+    return {
+        "data": records,
+        "symbol": symbol,
+        "is_mock": df.attrs.get("is_mock", False),
+        "_quality": quality.to_dict() if quality else None,
+    }
 
 
 @router.post("/stock")
 def stock_analysis(query: AnalysisQuery):
     """对个股进行AI综合分析（V8: 附加结构化评分）"""
-    symbol = query.symbol.strip()
+    symbol = _validate_symbol(query.symbol)
 
     # 获取数据
     df = get_stock_daily(symbol)
     if df.empty:
         raise HTTPException(404, f"未找到股票 {symbol} 的数据")
 
+    # 读取数据质量
+    quality = df.attrs.get("_quality")
+    is_degraded = quality is not None and not quality.is_valid()
+    if quality:
+        set_system_quality(quality)
+
     stock_name = get_stock_name(symbol)
     quote = get_realtime_quote(symbol)
     fund_flow = get_stock_fund_flow(symbol)
 
-    # 行情数据文本化（最近60天）
+    # 基础数据摘要：优先使用实时行情（腾讯），兜底走日K（新浪/其他）
+    latest = df.iloc[-1]
+    if quote and quote.get("最新价", 0) > 0:
+        summary = {
+            "symbol": symbol,
+            "name": stock_name,
+            "close": float(quote["最新价"]),
+            "pct_change": float(quote.get("涨跌幅", 0)),
+            "volume": float(quote.get("成交量", 0)),
+            "turnover": float(quote.get("换手率", 0)),
+            "high": float(quote.get("最高", 0)),
+            "low": float(quote.get("最低", 0)),
+            "market_cap": float(quote.get("总市值", 0)),
+            "pe": float(quote.get("PE", 0)) if quote.get("PE") else None,
+            "prev_close": float(quote.get("昨收", 0)),
+            "open": float(quote.get("今开", 0)),
+        }
+    else:
+        summary = {
+            "symbol": symbol,
+            "name": stock_name,
+            "close": float(latest["close"]),
+            "pct_change": float(latest["pct_change"]),
+            "volume": float(latest["volume"]),
+            "turnover": float(latest["turnover"]),
+            "high": float(latest["high"]),
+            "low": float(latest["low"]),
+        }
+        if quote:
+            summary["market_cap"] = quote.get("总市值", 0)
+            summary["pe"] = quote.get("PE", 0)
+
+    # ── 降级路径: 数据不可信，不调 LLM / agent ──
+    if is_degraded:
+        pop_mock_used()  # 清掉旧全局标记，避免泄露
+        analysis_text = degraded_analysis(
+            stock_name=stock_name, symbol=symbol,
+            source=quality.source.value if quality else "unknown",
+            confidence=quality.confidence if quality else 0.0,
+            realtime=quality.realtime if quality else False,
+        )
+        return {
+            "summary": summary,
+            "analysis": analysis_text,
+            "structured_scores": None,
+            "data_points": len(df.tail(60)),
+            "kline_data": df.tail(60).to_dict(orient="records"),
+            "is_mock_data": True,
+            "is_degraded": True,
+            "quality": quality.to_dict() if quality else None,
+        }
+
+    # ── 正常路径: 真实数据，允许 LLM 分析 ──
     recent = df.tail(60)
     market_text = recent.to_csv(sep="\t", index=False)
-
-    # 资金流向文本化
     flow_text = str(fund_flow) if fund_flow else "暂无资金流向数据"
 
-    # AI分析
-    result = analyze_stock(
-        stock_name=stock_name,
-        symbol=symbol,
-        market_data=market_text,
-        fund_flow_data=flow_text,
-        analysis_type=query.analysis_type,
-    )
-
-    # V8: 附加结构化评分
+    # V8: 结构化评分（先算，供 LLM prompt 引用）
+    structured_scores = None
     try:
         from backend.feature_engine import StockFeatures
         from backend.score_engine import compute_stock_scores
@@ -79,27 +176,17 @@ def stock_analysis(query: AnalysisQuery):
         scores = compute_stock_scores(sf)
         structured_scores = scores.to_dict()
     except Exception:
-        structured_scores = None
+        pass
 
-    # 基础数据摘要
-    latest = df.iloc[-1]
-    summary = {
-        "symbol": symbol,
-        "name": stock_name,
-        "close": float(latest["close"]),
-        "pct_change": float(latest["pct_change"]),
-        "volume": float(latest["volume"]),
-        "turnover": float(latest["turnover"]),
-        "high": float(latest["high"]),
-        "low": float(latest["low"]),
-    }
-    if quote:
-        summary.update({
-            "market_cap": quote.get("总市值", 0),
-            "pe": quote.get("PE", 0),
-        })
-
-    is_mock = pop_mock_used()
+    # AI分析（传入 V8 评分供参考）
+    result = analyze_stock(
+        stock_name=stock_name,
+        symbol=symbol,
+        market_data=market_text,
+        fund_flow_data=flow_text,
+        analysis_type=query.analysis_type,
+        v8_scores=structured_scores,
+    )
 
     return {
         "summary": summary,
@@ -107,7 +194,9 @@ def stock_analysis(query: AnalysisQuery):
         "structured_scores": structured_scores,
         "data_points": len(recent),
         "kline_data": recent.to_dict(orient="records"),
-        "is_mock_data": is_mock,
+        "is_mock_data": quality.is_mock() if quality else False,
+        "is_degraded": False,
+        "quality": quality.to_dict() if quality else None,
     }
 
 
@@ -118,7 +207,7 @@ def local_analysis(query: AnalysisQuery):
     返回结构与 /stock 接口对齐（summary + analysis + kline_data），
     前端组件共用同一份渲染逻辑。
     """
-    symbol = query.symbol.strip()
+    symbol = _validate_symbol(query.symbol)
     df = get_stock_daily(symbol)
     if df.empty:
         raise HTTPException(404, f"未找到股票 {symbol} 的数据")
@@ -133,22 +222,59 @@ def local_analysis(query: AnalysisQuery):
 
     result = _local_rule_analysis(stock_name, market_text, flow_text, query.analysis_type)
 
-    latest = df.iloc[-1]
-    summary = {
-        "symbol": symbol,
-        "name": stock_name,
-        "close": float(latest["close"]),
-        "pct_change": float(latest["pct_change"]),
-        "volume": float(latest["volume"]),
-        "turnover": float(latest["turnover"]),
-        "high": float(latest["high"]),
-        "low": float(latest["low"]),
-    }
-    if quote:
-        summary["market_cap"] = quote.get("总市值", 0)
-        summary["pe"] = quote.get("PE", 0)
+    # 优先使用实时行情
+    if quote and quote.get("最新价", 0) > 0:
+        summary = {
+            "symbol": symbol,
+            "name": stock_name,
+            "close": float(quote["最新价"]),
+            "pct_change": float(quote.get("涨跌幅", 0)),
+            "volume": float(quote.get("成交量", 0)),
+            "turnover": float(quote.get("换手率", 0)),
+            "high": float(quote.get("最高", 0)),
+            "low": float(quote.get("最低", 0)),
+            "market_cap": float(quote.get("总市值", 0)),
+            "pe": float(quote.get("PE", 0)) if quote.get("PE") else None,
+            "prev_close": float(quote.get("昨收", 0)),
+            "open": float(quote.get("今开", 0)),
+        }
+    else:
+        latest = df.iloc[-1]
+        summary = {
+            "symbol": symbol,
+            "name": stock_name,
+            "close": float(latest["close"]),
+            "pct_change": float(latest["pct_change"]),
+            "volume": float(latest["volume"]),
+            "turnover": float(latest["turnover"]),
+            "high": float(latest["high"]),
+            "low": float(latest["low"]),
+        }
+        if quote:
+            summary["market_cap"] = quote.get("总市值", 0)
+            summary["pe"] = quote.get("PE", 0)
 
-    is_mock = pop_mock_used()
+    # ── 降级路径: 数据不可信 ──
+    quality = df.attrs.get("_quality")
+    if quality is not None and not quality.is_valid():
+        pop_mock_used()
+        analysis_text = degraded_analysis(
+            stock_name=stock_name, symbol=symbol,
+            source=quality.source.value, confidence=quality.confidence,
+            realtime=quality.realtime,
+        )
+        return {
+            "summary": summary,
+            "symbol": symbol,
+            "name": stock_name,
+            "analysis": analysis_text,
+            "data_points": len(recent),
+            "kline_data": recent.to_dict(orient="records"),
+            "is_mock_data": True,
+            "is_degraded": True,
+        }
+
+    pop_mock_used()  # 清掉旧全局标记，避免泄露
 
     return {
         "summary": summary,
@@ -157,12 +283,26 @@ def local_analysis(query: AnalysisQuery):
         "analysis": result,
         "data_points": len(recent),
         "kline_data": recent.to_dict(orient="records"),
-        "is_mock_data": is_mock,
+        "is_mock_data": quality.is_mock() if quality else False,
+        "is_degraded": False,
     }
+
+
 @router.post("/limit-up")
 def limit_up_analysis(query: AnalysisQuery):
     """个股涨停原因分析"""
-    symbol = query.symbol.strip()
+    symbol = _validate_symbol(query.symbol)
+
+    # 检查数据质量
+    df = get_stock_daily(symbol)
+    quality = df.attrs.get("_quality") if not df.empty else None
+    if quality is not None and not quality.is_valid():
+        return {
+            "symbol": symbol, "name": get_stock_name(symbol),
+            "analysis": {"error": "degraded", "message": "数据源不可用，系统已降级，无法分析涨停原因。"},
+            "is_degraded": True,
+        }
+
     agent = LimitUpAgent()
     result = agent.analyze(symbol)
     return {
@@ -175,7 +315,17 @@ def limit_up_analysis(query: AnalysisQuery):
 @router.post("/limit-down")
 def limit_down_analysis(query: AnalysisQuery):
     """个股跌停原因分析"""
-    symbol = query.symbol.strip()
+    symbol = _validate_symbol(query.symbol)
+
+    df = get_stock_daily(symbol)
+    quality = df.attrs.get("_quality") if not df.empty else None
+    if quality is not None and not quality.is_valid():
+        return {
+            "symbol": symbol, "name": get_stock_name(symbol),
+            "analysis": {"error": "degraded", "message": "数据源不可用，系统已降级，无法分析跌停原因。"},
+            "is_degraded": True,
+        }
+
     agent = LimitDownAgent()
     result = agent.analyze(symbol)
     return {
@@ -188,7 +338,17 @@ def limit_down_analysis(query: AnalysisQuery):
 @router.post("/expectation-gap")
 def expectation_gap(query: AnalysisQuery):
     """个股预期差分析 — 利好不涨/利空不跌等反常现象"""
-    symbol = query.symbol.strip()
+    symbol = _validate_symbol(query.symbol)
+
+    df = get_stock_daily(symbol)
+    quality = df.attrs.get("_quality") if not df.empty else None
+    if quality is not None and not quality.is_valid():
+        return {
+            "symbol": symbol, "name": get_stock_name(symbol),
+            "analysis": {"error": "degraded", "message": "数据源不可用，系统已降级，无法分析预期差。"},
+            "is_degraded": True,
+        }
+
     agent = ExpectationGapAgent()
     result = agent.analyze(symbol)
     return {
@@ -225,6 +385,23 @@ def market_review():
         # V8: 一次拉取 + 结构化评分，消除 N+1
         mf = MarketFeatures.compute()
         scores = compute_market_scores(mf)
+
+        # 检查数据质量: 如果涨停数据不可用，视为降级
+        is_degraded = mf.limit_up_count < 0 or mf.zhaban_rate < 0
+
+        if is_degraded:
+            return {
+                "market_scores": scores.to_dict(),
+                "limit_up_count": mf.limit_up_count,
+                "limit_down_count": mf.limit_down_count,
+                "zhaban_rate": mf.zhaban_rate,
+                "top_boards": mf.top_boards,
+                "ai_review": "当前无法获取真实行情，系统已降级。无法进行市场复盘分析。",
+                "sector_rotation": {},
+                "similar_days": [],
+                "rag_enabled": False,
+                "is_degraded": True,
+            }
 
         # AI 复盘
         review_agent = MarketReviewAgent()
@@ -315,7 +492,7 @@ def stock_scores(query: StockScoresQuerySchema):
     from backend.feature_engine import StockFeatures
     from backend.score_engine import compute_stock_scores
 
-    symbol = query.symbol.strip()
+    symbol = _validate_symbol(query.symbol)
     sf = StockFeatures.compute(symbol)
     scores = compute_stock_scores(sf)
     return scores.to_dict()
@@ -424,7 +601,13 @@ def rag_similar(date: str = ""):
 def rag_similar_today():
     """获取与今日市场行情相似的历史交易日"""
     try:
-        from backend.services import get_all_limit_up_today, get_zhaban_rate, get_top_boards, get_market_overview, get_limit_down_pool
+        from backend.services import (
+            get_all_limit_up_today,
+            get_limit_down_pool,
+            get_market_overview,
+            get_top_boards,
+            get_zhaban_rate,
+        )
 
         overview = get_market_overview()
         limit_up_count = get_all_limit_up_today()
@@ -442,8 +625,9 @@ def rag_similar_today():
             "up_down_ratio": limit_up_count / max(limit_down_count, 1) if limit_down_count > 0 else 0,
         }
 
-        from rag.retriever import retrieve_similar_market_days
         from datetime import datetime
+
+        from rag.retriever import retrieve_similar_market_days
         today = datetime.now().strftime("%Y-%m-%d")
         similar = retrieve_similar_market_days(market_data, exclude_date=today)
         return {"today": today, "similar_days": similar}
@@ -509,7 +693,7 @@ def run_backtest_endpoint(
     支持策略: ma_cross / volume_breakout / dragon_follow
     返回: 收益曲线、交易记录、绩效指标
     """
-    from backend.backtest import run_backtest, STRATEGIES
+    from backend.backtest import STRATEGIES, run_backtest
 
     if strategy not in STRATEGIES:
         raise HTTPException(400, f"未知策略: {strategy}，支持: {list(STRATEGIES.keys())}")
@@ -561,7 +745,7 @@ def strategy_market(sort_by: str = "sharpe"):
 
     sort_by: sharpe / return / win_rate
     """
-    from backend.backtest import run_backtest, STRATEGIES
+    from backend.backtest import STRATEGIES, run_backtest
 
     symbols = ["000001", "600519", "000858", "300750", "002594", "601318",
                "000333", "600036", "601166", "002415"]
@@ -597,3 +781,5 @@ def strategy_market(sort_by: str = "sharpe"):
     results.sort(key=lambda x: x[sort_key], reverse=True)
 
     return {"rankings": results[:30], "sort_by": sort_by, "updated": __import__("datetime").datetime.now().isoformat()}
+
+

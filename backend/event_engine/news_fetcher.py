@@ -1,12 +1,13 @@
 """新闻获取 — akshare 财经新闻 + TTL 缓存"""
 import hashlib
 import logging
-from datetime import datetime, timedelta
-from typing import List, Optional
+from datetime import datetime
+
 import pandas as pd
 
 from backend.services._cache import _cache_get, _cache_set
 from backend.services._helpers import _try_akshare
+
 from .event_types import NewsItem
 
 logger = logging.getLogger("market_engine.event")
@@ -18,7 +19,7 @@ def _hash_title(title: str) -> str:
     return hashlib.md5(title.encode()).hexdigest()[:12]
 
 
-def _parse_news_df(df: pd.DataFrame) -> List[NewsItem]:
+def _parse_news_df(df: pd.DataFrame) -> list[NewsItem]:
     """DataFrame → NewsItem 列表"""
     items = []
     for _, row in df.iterrows():
@@ -42,7 +43,7 @@ def _parse_news_df(df: pd.DataFrame) -> List[NewsItem]:
     return items
 
 
-def fetch_finance_news(limit: int = 50) -> List[NewsItem]:
+def fetch_finance_news(limit: int = 50) -> list[NewsItem]:
     """获取财联社等来源的 A 股快讯"""
     cache_key = "finance_news"
     cached = _cache_get(cache_key)
@@ -50,7 +51,7 @@ def fetch_finance_news(limit: int = 50) -> List[NewsItem]:
         # 只返回前 limit 条
         return cached[:limit] if isinstance(cached, list) else cached
 
-    items: List[NewsItem] = []
+    items: list[NewsItem] = []
 
     # 来源1: 财联社电报
     try:
@@ -75,7 +76,7 @@ def fetch_finance_news(limit: int = 50) -> List[NewsItem]:
     return items[:limit]
 
 
-def fetch_sector_news(sector_name: str, limit: int = 20) -> List[NewsItem]:
+def fetch_sector_news(sector_name: str, limit: int = 20) -> list[NewsItem]:
     """获取特定板块相关新闻（基于全量新闻关键词过滤）"""
     all_news = fetch_finance_news(limit=100)
     matched = []
@@ -88,7 +89,7 @@ def fetch_sector_news(sector_name: str, limit: int = 20) -> List[NewsItem]:
     return matched
 
 
-def fetch_today_events() -> List[NewsItem]:
+def fetch_today_events() -> list[NewsItem]:
     """获取今日事件（用于时间线构建）"""
     today = datetime.now().strftime("%Y-%m-%d")
     all_news = fetch_finance_news(limit=100)

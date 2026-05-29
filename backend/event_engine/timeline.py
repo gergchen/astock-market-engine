@@ -1,13 +1,11 @@
 """事件时间线 — 按时间排列的事件流 + 查询"""
-from datetime import datetime
-from typing import List, Optional
-from .event_types import TimelineEntry, Event, NewsItem
+from .event_extractor import classify_event
+from .event_types import TimelineEntry
 from .news_fetcher import fetch_today_events
-from .event_extractor import extract_event, classify_event
 from .stock_linker import link_news_to_stocks
 
 
-def build_today_timeline() -> List[TimelineEntry]:
+def build_today_timeline() -> list[TimelineEntry]:
     """构建今日事件时间线"""
     news_list = fetch_today_events()
     if not news_list:
@@ -35,10 +33,10 @@ def build_today_timeline() -> List[TimelineEntry]:
 
 
 def query_timeline(
-    keyword: Optional[str] = None,
-    event_type: Optional[str] = None,
+    keyword: str | None = None,
+    event_type: str | None = None,
     min_importance: str = "low",
-) -> List[TimelineEntry]:
+) -> list[TimelineEntry]:
     """查询时间线（可过滤）"""
     entries = build_today_timeline()
     importance_order = {"high": 3, "medium": 2, "low": 1}
@@ -56,19 +54,19 @@ def query_timeline(
     return result
 
 
-def get_events_by_sector(sector: str) -> List[TimelineEntry]:
+def get_events_by_sector(sector: str) -> list[TimelineEntry]:
     """获取与特定板块相关的事件"""
     entries = build_today_timeline()
     return [e for e in entries if sector in e.title or any(sector in m for m in e.affected_markets)]
 
 
-def get_market_drivers() -> List[dict]:
+def get_market_drivers() -> list[dict]:
     """返回今日市场驱动因素（解释"为什么今天爆"）
 
     聚合政策+行业事件，按重要性排序。
     """
     entries = build_today_timeline()
-    drivers: List[dict] = []
+    drivers: list[dict] = []
 
     for e in entries:
         if e.importance in ("high", "medium"):

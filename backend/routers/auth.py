@@ -8,18 +8,20 @@ import hmac
 import json
 import os
 import time
-from base64 import urlsafe_b64encode, urlsafe_b64decode
-from typing import Optional
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 
-from fastapi import APIRouter, HTTPException, Header, Depends
-from pydantic import BaseModel, EmailStr
-from backend.database.models import User
+from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel
+
 from backend.database.db import SessionLocal
+from backend.database.models import User
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
 
 # JWT secret — 生产环境应从环境变量读取
-_JWT_SECRET = os.environ.get("JWT_SECRET", "astock-copilot-secret-change-me").encode()
+from backend.config import JWT_SECRET as _jwt_secret_env
+
+_JWT_SECRET = _jwt_secret_env.encode() if _jwt_secret_env else os.urandom(32)
 _TOKEN_EXPIRE_HOURS = 72
 
 # ─── Request/Response models ───────────────────────────────────────────────────
@@ -27,7 +29,7 @@ _TOKEN_EXPIRE_HOURS = 72
 class RegisterRequest(BaseModel):
     username: str
     password: str
-    email: Optional[str] = None
+    email: str | None = None
 
 class LoginRequest(BaseModel):
     username: str
@@ -40,7 +42,7 @@ class TokenResponse(BaseModel):
 
 class UserInfo(BaseModel):
     username: str
-    email: Optional[str] = None
+    email: str | None = None
     is_active: bool = True
 
 # ─── Password hashing ──────────────────────────────────────────────────────────
@@ -72,7 +74,7 @@ def _create_token(username: str) -> str:
     return f"{header}.{payload}.{sig}"
 
 
-def _verify_token(token: str) -> Optional[str]:
+def _verify_token(token: str) -> str | None:
     """验证 token 并返回 username，失败返回 None"""
     try:
         parts = token.split(".")
@@ -97,7 +99,7 @@ def _verify_token(token: str) -> Optional[str]:
 
 # ─── Dependency ────────────────────────────────────────────────────────────────
 
-def get_current_user(authorization: str = Header("")) -> Optional[str]:
+def get_current_user(authorization: str = Header("")) -> str | None:
     """FastAPI 依赖：从 Bearer token 提取当前用户名"""
     if not authorization.startswith("Bearer "):
         return None
@@ -105,7 +107,7 @@ def get_current_user(authorization: str = Header("")) -> Optional[str]:
     return _verify_token(token)
 
 
-def require_user(username: Optional[str] = Depends(get_current_user)) -> str:
+def require_user(username: str | None = Depends(get_current_user)) -> str:
     """FastAPI 依赖：要求登录，否则 401"""
     if username is None:
         raise HTTPException(401, "请先登录")
@@ -179,3 +181,6 @@ def get_me(username: str = Depends(require_user)):
         return UserInfo(username=user.username, email=user.email, is_active=bool(user.is_active))
     finally:
         db.close()
+
+
+

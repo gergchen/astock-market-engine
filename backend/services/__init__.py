@@ -17,32 +17,44 @@
 
 # 基础设施（被其它模块内部使用，同时也对外暴露）
 from ._cache import _cache_get, _cache_set, mark_mock_used, pop_mock_used
-from ._helpers import _try_akshare, _generate_mock_data
+from ._helpers import _generate_mock_data, _try_akshare
 
-# 个股数据
-from .market_data import get_stock_daily, get_stock_name, _fetch_stock_daily_curl
-
-# 实时行情
-from .quote_data import (
-    get_realtime_quote,
-    get_realtime_quote_map,
-    get_market_overview,
-    _get_spot_em_df,
-    _row_to_quote,
-)
-
-# 涨跌停 + 龙虎榜
-from .limit_data import get_limit_up_pool, get_limit_down_pool, get_lhb_detail
-
-# 资金流向
-from .flow_data import (
-    get_stock_fund_flow,
-    get_sector_fund_flow,
-    get_sector_fund_flow_by_type,
+# 数据质量层
+from .data_quality import (
+    DataQuality,
+    DataSource,
+    classify_system_status,
+    get_system_quality,
+    pop_system_quality,
+    quality_dict,
+    set_system_quality,
+    tag_kline_df,
 )
 
 # 财报
 from .financial_data import get_stock_financial
 
+# 资金流向
+from .flow_data import (
+    get_sector_fund_flow,
+    get_sector_fund_flow_by_type,
+    get_stock_fund_flow,
+)
+
+# 涨跌停 + 龙虎榜
+from .limit_data import get_lhb_detail, get_limit_down_pool, get_limit_up_pool
+
 # 盘面计算
-from .market_compute import get_all_limit_up_today, get_zhaban_rate, get_top_boards
+from .market_compute import get_all_limit_up_today, get_top_boards, get_zhaban_rate
+
+# 个股数据
+from .market_data import _fetch_stock_daily_curl, get_stock_daily, get_stock_name
+
+# 实时行情
+from .quote_data import (
+    _get_spot_em_df,
+    _row_to_quote,
+    get_market_overview,
+    get_realtime_quote,
+    get_realtime_quote_map,
+)

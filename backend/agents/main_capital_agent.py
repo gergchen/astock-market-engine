@@ -2,7 +2,7 @@
 
 基于文档第十九章的量化规则，识别主力处于吸筹/洗盘/主升/出货哪个阶段。
 """
-from typing import Dict, Any, Optional
+from typing import Any
 
 
 class MainCapitalAgent:
@@ -11,7 +11,7 @@ class MainCapitalAgent:
     def __init__(self):
         self.stages = ["吸筹", "洗盘", "主升", "出货"]
 
-    def analyze(self, stock_data: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze(self, stock_data: dict[str, Any]) -> dict[str, Any]:
         """对股票数据进行主力行为分析"""
         close = stock_data.get("close", 0)
         avg_60 = stock_data.get("ma_60", close)

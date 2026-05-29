@@ -4,7 +4,7 @@ MainCapitalAgent / ExpectationGapAgent / LimitUpAgent 不再各自
 重复计算均线/量比/累计涨幅/资金流向，统一由此模块输出。
 """
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, List
+from typing import Any
 
 import pandas as pd
 
@@ -42,8 +42,8 @@ class StockFeatures:
     vol_ratio_vs_avg20: float = 1.0   # volume / avg_vol_20
 
     # 累计涨幅
-    cum_gain_20d: Optional[float] = None
-    cum_gain_60d: Optional[float] = None
+    cum_gain_20d: float | None = None
+    cum_gain_60d: float | None = None
 
     # 资金流向
     main_flow: float = 0.0   # 主力净流入（万元）
@@ -54,7 +54,7 @@ class StockFeatures:
     has_lower_shadow: bool = False  # 有下影线
 
     # K 线数据（供图表渲染，不重复拉取）
-    kline_records: List[Dict[str, Any]] = field(default_factory=list, repr=False)
+    kline_records: list[dict[str, Any]] = field(default_factory=list, repr=False)
 
     @classmethod
     def compute(cls, symbol: str) -> "StockFeatures":
@@ -90,8 +90,8 @@ class StockFeatures:
         amplitude = (high - low) / close * 100 if close > 0 else 0.0
 
         # 累计涨幅
-        cum_60d: Optional[float] = None
-        cum_20d: Optional[float] = None
+        cum_60d: float | None = None
+        cum_20d: float | None = None
         if len(df) >= 2:
             cum_60d = _calc_cum_gain(df, 60)
             cum_20d = _calc_cum_gain(df, 20)
@@ -129,7 +129,7 @@ class StockFeatures:
             kline_records=recent_60.to_dict(orient="records"),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转为 dict（不含 K 线数据，减少序列化体积）"""
         return {
             "symbol": self.symbol,
@@ -155,7 +155,7 @@ class StockFeatures:
             "has_lower_shadow": self.has_lower_shadow,
         }
 
-    def to_agent_input(self) -> Dict[str, Any]:
+    def to_agent_input(self) -> dict[str, Any]:
         """转为 MainCapitalAgent.analyze() 期望的 stock_data 字典格式
 
         保持与现有 Agent 接口的向后兼容。
@@ -181,7 +181,7 @@ class StockFeatures:
         )
 
 
-def _calc_cum_gain(df: pd.DataFrame, days: int) -> Optional[float]:
+def _calc_cum_gain(df: pd.DataFrame, days: int) -> float | None:
     """计算近 N 日累计涨跌幅"""
     recent = df.tail(min(days, len(df)))
     if len(recent) < 2:

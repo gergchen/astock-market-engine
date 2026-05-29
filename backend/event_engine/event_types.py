@@ -1,7 +1,5 @@
 """事件引擎数据类型"""
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Optional, List
 
 
 @dataclass
@@ -12,7 +10,7 @@ class NewsItem:
     source: str = ""
     publish_time: str = ""
     url: str = ""
-    keywords: List[str] = field(default_factory=list)
+    keywords: list[str] = field(default_factory=list)
 
     def __repr__(self) -> str:
         return f"NewsItem({self.title[:40]}...)"
@@ -25,13 +23,13 @@ class Event:
     title: str
     summary: str = ""
     event_type: str = ""          # 政策/财报/行业/市场/其他
-    keywords: List[str] = field(default_factory=list)
-    affected_sectors: List[str] = field(default_factory=list)
-    affected_stocks: List[str] = field(default_factory=list)
+    keywords: list[str] = field(default_factory=list)
+    affected_sectors: list[str] = field(default_factory=list)
+    affected_stocks: list[str] = field(default_factory=list)
     sentiment: str = "neutral"     # positive/negative/neutral
     impact_score: float = 0.0      # 0-1
     publish_time: str = ""
-    related_events: List[str] = field(default_factory=list)
+    related_events: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -40,8 +38,8 @@ class HotTopic:
     keyword: str
     count: int = 0
     trend: str = "stable"        # rising/falling/stable
-    related_sectors: List[str] = field(default_factory=list)
-    related_stocks: List[str] = field(default_factory=list)
+    related_sectors: list[str] = field(default_factory=list)
+    related_stocks: list[str] = field(default_factory=list)
     first_seen: str = ""
     last_seen: str = ""
 
@@ -52,5 +50,5 @@ class TimelineEntry:
     time: str
     title: str
     event_type: str = ""
-    affected_markets: List[str] = field(default_factory=list)
+    affected_markets: list[str] = field(default_factory=list)
     importance: str = "low"       # high/medium/low

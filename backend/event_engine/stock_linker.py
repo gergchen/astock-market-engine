@@ -1,15 +1,14 @@
 """个股联动 — 事件 → 受影响个股评分"""
 import hashlib
-from typing import List, Dict
-from .event_types import Event, NewsItem
+
+from .concept_mapper import concept_to_stocks, keyword_to_stocks
 from .event_extractor import extract_keywords, get_affected_sectors
-from .concept_mapper import keyword_to_stocks, concept_to_stocks
+from .event_types import Event, NewsItem
+
+_LINK_CACHE: dict[str, list[str]] = {}
 
 
-_LINK_CACHE: Dict[str, List[str]] = {}
-
-
-def link_news_to_stocks(news: NewsItem) -> List[str]:
+def link_news_to_stocks(news: NewsItem) -> list[str]:
     """单条新闻 → 可能受影响的股票列表"""
     cache_key = hashlib.md5(news.title.encode()).hexdigest()[:12]
     if cache_key in _LINK_CACHE:
@@ -43,7 +42,7 @@ def enrich_event(event: Event, news: NewsItem) -> Event:
     return event
 
 
-def batch_link(news_list: List[NewsItem]) -> List[Event]:
+def batch_link(news_list: list[NewsItem]) -> list[Event]:
     """批量新闻 → 事件（含个股联动）"""
     from .event_extractor import extract_event
 
@@ -55,11 +54,11 @@ def batch_link(news_list: List[NewsItem]) -> List[Event]:
     return events
 
 
-def get_today_linked_stocks() -> Dict[str, List[str]]:
+def get_today_linked_stocks() -> dict[str, list[str]]:
     """获取今日事件关联的个股映射（个股 → 关联事件标题）"""
     from .news_fetcher import fetch_today_events
     news_list = fetch_today_events()
-    stock_events: Dict[str, List[str]] = {}
+    stock_events: dict[str, list[str]] = {}
 
     for news in news_list:
         stocks = link_news_to_stocks(news)

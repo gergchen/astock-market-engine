@@ -3,11 +3,10 @@
 提供双向查询：概念找个股，个股找概念。
 数据基于 akshare 概念板块 + 行业分类 + 常见映射。
 """
-from typing import List, Dict, Set, Optional
 from backend.services.flow_data import get_sector_fund_flow_by_type
 
 # ── 核心概念 → 典型关联个股 ──
-_CONCEPT_STOCKS: Dict[str, List[str]] = {
+_CONCEPT_STOCKS: dict[str, list[str]] = {
     "AI": ["300033", "300418", "002230", "603019", "688111", "300624"],
     "芯片": ["688981", "002049", "603986", "688396", "600703"],
     "新能源": ["300750", "002594", "601012", "300274", "688599"],
@@ -23,7 +22,7 @@ _CONCEPT_STOCKS: Dict[str, List[str]] = {
 }
 
 # ── 概念 → 板块名称映射 ──
-_CONCEPT_SECTORS: Dict[str, List[str]] = {
+_CONCEPT_SECTORS: dict[str, list[str]] = {
     "AI": ["人工智能", "ChatGPT概念", "AIGC概念", "算力概念"],
     "芯片": ["半导体", "国产芯片", "光刻机(胶)", "Chiplet概念"],
     "新能源": ["光伏设备", "风电设备", "储能", "锂电池", "钠离子电池"],
@@ -39,17 +38,17 @@ _CONCEPT_SECTORS: Dict[str, List[str]] = {
 }
 
 
-def concept_to_sectors(concept: str) -> List[str]:
+def concept_to_sectors(concept: str) -> list[str]:
     """概念 → 关联板块名称列表"""
     return _CONCEPT_SECTORS.get(concept, [concept])
 
 
-def concept_to_stocks(concept: str) -> List[str]:
+def concept_to_stocks(concept: str) -> list[str]:
     """概念 → 核心关联股票代码列表"""
     return _CONCEPT_STOCKS.get(concept, [])
 
 
-def sector_to_concepts(sector_name: str) -> List[str]:
+def sector_to_concepts(sector_name: str) -> list[str]:
     """板块名 → 反查关联概念"""
     found = []
     for concept, sectors in _CONCEPT_SECTORS.items():
@@ -60,9 +59,9 @@ def sector_to_concepts(sector_name: str) -> List[str]:
     return list(set(found))
 
 
-def keyword_to_stocks(keyword: str) -> List[str]:
+def keyword_to_stocks(keyword: str) -> list[str]:
     """任意关键词 → 可能影响的个股"""
-    stocks: Set[str] = set()
+    stocks: set[str] = set()
 
     # 1. 直接概念匹配
     for concept, stock_list in _CONCEPT_STOCKS.items():
@@ -79,7 +78,7 @@ def keyword_to_stocks(keyword: str) -> List[str]:
     return list(stocks)[:10]
 
 
-def get_hot_sectors_from_flow() -> List[Dict]:
+def get_hot_sectors_from_flow() -> list[dict]:
     """从实时板块资金流向获取当前热门板块"""
     try:
         df = get_sector_fund_flow_by_type("概念资金流向")

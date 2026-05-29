@@ -5,17 +5,16 @@
 """
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 import pandas as pd
 
 from backend.services import (
-    get_limit_up_pool,
     get_limit_down_pool,
+    get_limit_up_pool,
     get_market_overview,
-    get_zhaban_rate,
     get_top_boards,
-    get_sector_fund_flow_by_type,
+    get_zhaban_rate,
 )
 
 
@@ -30,7 +29,7 @@ class MarketFeatures:
 
     # 连板
     max_board_height: int = 0
-    top_boards: List[Dict[str, Any]] = field(default_factory=list)
+    top_boards: list[dict[str, Any]] = field(default_factory=list)
 
     # 指数
     index_name: str = "上证指数"
@@ -41,11 +40,11 @@ class MarketFeatures:
     up_down_ratio: float = 0.0
 
     # 板块分布 (industry -> 涨停数)
-    board_distribution: Dict[str, int] = field(default_factory=dict)
+    board_distribution: dict[str, int] = field(default_factory=dict)
 
     # 原始池 (Agent 需要深度分析时使用，避免二次查询)
-    limit_up_pool: Optional[pd.DataFrame] = field(default=None, repr=False)
-    limit_down_pool: Optional[pd.DataFrame] = field(default=None, repr=False)
+    limit_up_pool: pd.DataFrame | None = field(default=None, repr=False)
+    limit_down_pool: pd.DataFrame | None = field(default=None, repr=False)
 
     # 时间戳
     computed_at: str = ""
@@ -79,7 +78,7 @@ class MarketFeatures:
         ratio = up_count / max(down_count, 1) if down_count > 0 else float(up_count)
 
         # 涨停分布（行业 → 数量）
-        board_dist: Dict[str, int] = {}
+        board_dist: dict[str, int] = {}
         if not up_pool.empty and "所属行业" in up_pool.columns:
             for ind in up_pool["所属行业"].dropna().astype(str):
                 if ind and ind != "nan":
@@ -101,7 +100,7 @@ class MarketFeatures:
             computed_at=now,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转为可序列化 dict（不含 DataFrame）"""
         return {
             "limit_up_count": self.limit_up_count,

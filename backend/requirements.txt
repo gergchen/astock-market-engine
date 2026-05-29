@@ -8,6 +8,9 @@ akshare==1.18.63
 pandas==2.1.4
 numpy==1.26.2
 openai==1.6.1
+anthropic>=0.100.0
+lark-oapi>=1.0.0
+slowapi>=0.1.9
 # V7 RAG
 sqlalchemy==2.0.27
 qdrant-client==1.9.1
