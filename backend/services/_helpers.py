@@ -2,11 +2,14 @@
 
 上层模块通过 _try_akshare 调用 akshare，自动处理异常。
 """
-import numpy as np
-import pandas as pd
 import logging
 from datetime import datetime, timedelta
+
+import numpy as np
+import pandas as pd
+
 from ._cache import mark_mock_used
+from .data_quality import DataSource, tag_kline_df
 
 logger = logging.getLogger("market_engine.data")
 
@@ -59,4 +62,5 @@ def _generate_mock_data(symbol: str, days: int = 120) -> pd.DataFrame:
             "change": round(chg, 2), "turnover": round(turn, 2),
         })
 
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    return tag_kline_df(df, DataSource.MOCK, fallback_used=True)

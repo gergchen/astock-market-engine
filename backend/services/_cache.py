@@ -4,11 +4,10 @@
 """
 import threading
 import time
-from typing import Dict
 
 _DEFAULT_TTL = 60  # 秒
 
-_CACHE: Dict[str, tuple] = {}
+_CACHE: dict[str, tuple] = {}
 _CACHE_LOCK = threading.Lock()
 
 _MOCK_USED_SYMBOLS: set = set()

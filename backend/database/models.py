@@ -1,6 +1,5 @@
 """SQLAlchemy 数据模型 — SQLite / PostgreSQL 兼容"""
-from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, Text, DateTime, JSON, Index
+from sqlalchemy import JSON, Column, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.sql import func
 
