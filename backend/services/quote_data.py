@@ -4,14 +4,16 @@
 降级: akshare stock_zh_a_spot_em → 默认值
 """
 import json
+import logging
 import urllib.request
+from typing import Any
+
 import akshare as ak
 import pandas as pd
-import logging
-from typing import Optional, Dict, Any, List
 
 from ._cache import _cache_get, _cache_set
 from ._helpers import _try_akshare
+from .data_quality import DataSource, quality_dict
 
 logger = logging.getLogger("market_engine.quote")
 
@@ -27,7 +29,7 @@ def _get_market_prefix(code: str) -> str:
     return "sz"
 
 
-def _fetch_tencent_quotes(codes: List[str]) -> Dict[str, Dict[str, Any]]:
+def _fetch_tencent_quotes(codes: list[str]) -> dict[str, dict[str, Any]]:
     """批量从腾讯财经获取实时行情 (qt.gtimg.cn)
 
     返回: {code: {名称, 最新价, 涨跌幅, 涨跌额, 成交量, 成交额,
@@ -78,7 +80,7 @@ def _fetch_tencent_quotes(codes: List[str]) -> Dict[str, Dict[str, Any]]:
 
 # ── akshare 全市场快照 (备用) ──────────────────────────────────────────────
 
-def _get_spot_em_df() -> Optional[pd.DataFrame]:
+def _get_spot_em_df() -> pd.DataFrame | None:
     """获取全市场实时行情快照（带 30s TTL 缓存）"""
     cached = _cache_get("spot_em_df")
     if cached is not None:
@@ -89,7 +91,7 @@ def _get_spot_em_df() -> Optional[pd.DataFrame]:
     return df
 
 
-def _row_to_quote(row) -> Dict[str, Any]:
+def _row_to_quote(row) -> dict[str, Any]:
     """spot DataFrame 单行 → 行情字典（安全转换）"""
     def _f(key, default=0.0):
         try:
@@ -117,27 +119,30 @@ def _row_to_quote(row) -> Dict[str, Any]:
 
 # ── 实时行情接口 ──────────────────────────────────────────────────────────
 
-def get_realtime_quote(symbol: str) -> Dict[str, Any]:
+def get_realtime_quote(symbol: str) -> dict[str, Any]:
     """获取单只实时行情 — 优先腾讯财经, 降级 akshare"""
     result = _fetch_tencent_quotes([symbol])
     if result and symbol in result:
-        return result[symbol]
+        return quality_dict(result[symbol], DataSource.TENCENT)
 
     df = _get_spot_em_df()
     if df is not None:
         try:
             match = df[df["代码"] == symbol]
             if not match.empty:
-                return _row_to_quote(match.iloc[0])
+                return quality_dict(_row_to_quote(match.iloc[0]), DataSource.AKSHARE, fallback_used=True)
         except Exception:
             pass
-    return {}
+    return quality_dict({}, DataSource.DEFAULT, fallback_used=True)
 
 
-def get_realtime_quote_map(symbols: Optional[List[str]] = None) -> Dict[str, Dict[str, Any]]:
+def get_realtime_quote_map(symbols: list[str] | None = None) -> dict[str, dict[str, Any]]:
     """批量获取实时行情 — 优先腾讯财经, 降级 akshare"""
     if symbols and len(symbols) <= 50:
-        return _fetch_tencent_quotes(symbols)
+        quotes = _fetch_tencent_quotes(symbols)
+        if quotes:
+            return {k: quality_dict(v, DataSource.TENCENT) for k, v in quotes.items()}
+        return {}
 
     df = _get_spot_em_df()
     if df is None:
@@ -145,14 +150,15 @@ def get_realtime_quote_map(symbols: Optional[List[str]] = None) -> Dict[str, Dic
     try:
         if symbols:
             df = df[df["代码"].isin(symbols)]
-        return {str(row["代码"]): _row_to_quote(row) for _, row in df.iterrows()}
+        return {str(row["代码"]): quality_dict(_row_to_quote(row), DataSource.AKSHARE, fallback_used=True)
+                for _, row in df.iterrows()}
     except Exception:
         return {}
 
 
 # ── 大盘概况 ──────────────────────────────────────────────────────────────
 
-def get_market_overview() -> Dict[str, Any]:
+def get_market_overview() -> dict[str, Any]:
     """获取大盘概况 — 优先新浪财经指数日K, 降级腾讯, 最后默认值"""
     # 1) 新浪财经指数日K
     try:
@@ -174,7 +180,8 @@ def get_market_overview() -> Dict[str, Any]:
                 pct = round((close - prev_close) / prev_close * 100, 2)
             else:
                 pct = 0.0
-            return {"指数": "上证指数", "最新价": close, "涨跌幅": pct, "最高": high, "最低": low}
+            return quality_dict({"指数": "上证指数", "最新价": close, "涨跌幅": pct, "最高": high, "最低": low},
+                                DataSource.SINA)
     except Exception as e:
         logger.warning("新浪指数获取失败: %s", e)
 
@@ -189,13 +196,13 @@ def get_market_overview() -> Dict[str, Any]:
             if "=" in line and '"' in line:
                 vals = line.split('"')[1].split("~")
                 if len(vals) >= 35:
-                    return {
+                    return quality_dict({
                         "指数": vals[1] or "上证指数",
                         "最新价": float(vals[3]) if vals[3] else 3200.0,
                         "涨跌幅": float(vals[32]) if vals[32] else 0.0,
                         "最高": float(vals[33]) if vals[33] else 3200.0,
                         "最低": float(vals[34]) if vals[34] else 3190.0,
-                    }
+                    }, DataSource.TENCENT, fallback_used=True)
     except Exception as e:
         logger.warning("腾讯指数获取失败: %s", e)
 
@@ -207,11 +214,12 @@ def get_market_overview() -> Dict[str, Any]:
             close = float(latest["close"])
             prev_close = float(df.iloc[-2]["close"]) if len(df) >= 2 else close
             pct_change = round((close - prev_close) / prev_close * 100, 2)
-            return {
+            return quality_dict({
                 "指数": "上证指数", "最新价": close, "涨跌幅": pct_change,
                 "最高": float(latest["high"]), "最低": float(latest["low"]),
-            }
+            }, DataSource.AKSHARE, fallback_used=True)
         except Exception:
             pass
 
-    return {"指数": "上证指数", "最新价": 3200.0, "涨跌幅": 0.0, "最高": 3210.0, "最低": 3190.0}
+    return quality_dict({"指数": "上证指数", "最新价": 3200.0, "涨跌幅": 0.0, "最高": 3210.0, "最低": 3190.0},
+                        DataSource.DEFAULT, fallback_used=True)

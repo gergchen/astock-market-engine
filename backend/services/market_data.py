@@ -3,15 +3,15 @@
 数据源优先级: 新浪财经 → 腾讯财经 → curl_cffi(东财) → akshare → 模拟
 """
 import json
+import logging
 import urllib.request
+from datetime import datetime, timedelta
+
 import akshare as ak
 import pandas as pd
-import logging
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
 
-from ._cache import _cache_get, _cache_set
-from ._helpers import _try_akshare, _generate_mock_data
+from ._helpers import _generate_mock_data, _try_akshare
+from .data_quality import DataSource, tag_kline_df
 
 logger = logging.getLogger("market_engine.data")
 
@@ -19,8 +19,8 @@ logger = logging.getLogger("market_engine.data")
 
 def _fetch_stock_daily_sina(
     symbol: str,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> pd.DataFrame:
     """新浪财经日K线 — 返回中文列名 DataFrame, volume 单位=股"""
     try:
@@ -38,19 +38,24 @@ def _fetch_stock_daily_sina(
         if not rows or not isinstance(rows, list):
             return pd.DataFrame()
 
+        prev_close = None
         data = []
         for r in rows:
+            close_val = float(r["close"])
+            pct = round((close_val / prev_close - 1) * 100, 2) if prev_close and prev_close > 0 else 0.0
+            chg = round(close_val - prev_close, 2) if prev_close else 0.0
+            prev_close = close_val
             d = {
                 "日期": r["day"],
                 "开盘": float(r["open"]),
-                "收盘": float(r["close"]),
+                "收盘": close_val,
                 "最高": float(r["high"]),
                 "最低": float(r["low"]),
                 "成交量": int(float(r["volume"])),  # 股
                 "成交额": 0.0,
                 "振幅": round((float(r["high"]) - float(r["low"])) / float(r["open"]) * 100, 2),
-                "涨跌幅": 0.0,
-                "涨跌额": 0.0,
+                "涨跌幅": pct,
+                "涨跌额": chg,
                 "换手率": 0.0,
                 "股票代码": symbol,
             }
@@ -71,8 +76,8 @@ def _fetch_stock_daily_sina(
 
 def _fetch_stock_daily_tencent(
     symbol: str,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> pd.DataFrame:
     """腾讯财经日K线 — 返回中文列名 DataFrame, volume 单位=手"""
     try:
@@ -210,8 +215,8 @@ def _fetch_stock_daily_curl(
 
 def get_stock_daily(
     symbol: str,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    start_date: str | None = None,
+    end_date: str | None = None
 ) -> pd.DataFrame:
     """获取个股日K行情数据
 
@@ -224,14 +229,17 @@ def get_stock_daily(
 
     # 1) 新浪财经 HTTP (实测可用, 无封IP风险)
     df = _fetch_stock_daily_sina(symbol, start_date=start, end_date=end)
+    source_tag = (DataSource.SINA, False)
 
     # 2) 腾讯财经 HTTP
     if df is None or df.empty:
         df = _fetch_stock_daily_tencent(symbol, start_date=start, end_date=end)
+        source_tag = (DataSource.TENCENT, True)
 
     # 3) curl_cffi 东财
     if df is None or df.empty:
         df = _fetch_stock_daily_curl(symbol, period="daily", start_date=start, end_date=end, adjust="qfq")
+        source_tag = (DataSource.CURL_EASTMONEY, True)
 
     # 4) akshare
     if df is None or df.empty:
@@ -240,10 +248,12 @@ def get_stock_daily(
             symbol=symbol, period="daily",
             start_date=start, end_date=end, adjust="qfq"
         )
+        source_tag = (DataSource.AKSHARE, True)
 
     # 5) 全部失败，使用模拟数据
     if df is None or df.empty:
         df = _generate_mock_data(symbol, days=120)
+        source_tag = (DataSource.MOCK, True)
 
     # 补充换手率（新浪和腾讯日K不含换手率，从腾讯实时接口获取最新值作为参考）
     if df is not None and not df.empty and "换手率" in df.columns:
@@ -256,6 +266,7 @@ def get_stock_daily(
     # 统一列名为英文
     if df is None or df.empty:
         df = _generate_mock_data(symbol, days=120)
+        source_tag = (DataSource.MOCK, True)
 
     chinese_cols = list(df.columns)
     en_cols = ["date", "open", "close", "high", "low", "volume", "amount",
@@ -276,7 +287,10 @@ def get_stock_daily(
 
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
-    return df.sort_values("date")
+    df = df.sort_values("date")
+
+    # 标记数据质量
+    return tag_kline_df(df, source_tag[0], fallback_used=source_tag[1])
 
 
 _NAME_MAP = {
@@ -284,14 +298,32 @@ _NAME_MAP = {
     "002594": "比亚迪", "601012": "隆基绿能", "000333": "美的集团",
     "600036": "招商银行", "601318": "中国平安", "000001": "平安银行",
     "002415": "海康威视", "600276": "恒瑞医药", "300059": "东方财富",
-    "002115": "三维通信",
+    "002115": "三维通信", "601015": "陕西黑猫",
 }
 
 
 def get_stock_name(symbol: str) -> str:
-    """获取股票名称（带已知股票映射）"""
+    """获取股票名称（多数据源轮询）"""
+    # 1. 硬编码映射
     if symbol in _NAME_MAP:
         return _NAME_MAP[symbol]
+    # 2. 新浪财经实时行情 API（轻量，实测可用）
+    try:
+        prefix = "sh" if symbol.startswith(("6", "9")) else "sz"
+        url = f"http://hq.sinajs.cn/list={prefix}{symbol}"
+        req = urllib.request.Request(url)
+        req.add_header("Referer", "https://finance.sina.com.cn")
+        resp = urllib.request.urlopen(req, timeout=5)
+        raw = resp.read().decode("gbk")
+        # 返回格式: var hq_str_sh601015="陕西黑猫,...
+        if '"' in raw:
+            quoted = raw.split('"')[1] if raw.count('"') >= 2 else ""
+            name = quoted.split(",")[0] if quoted else ""
+            if name:
+                return name
+    except Exception:
+        pass
+    # 3. akshare 全量查询
     df = _try_akshare(ak.stock_zh_a_spot_em, None)
     if df is not None:
         try:
@@ -300,4 +332,5 @@ def get_stock_name(symbol: str) -> str:
                 return str(match.iloc[0]["名称"])
         except Exception:
             pass
+    # 4. 返回代码作为兜底
     return symbol
