@@ -1,17 +1,17 @@
 import type { Metadata, Viewport } from 'next'
-import { Sora, IBM_Plex_Mono } from 'next/font/google'
+import { DM_Sans, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { SystemStatusProvider } from '@/components/SystemStatusProvider'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 
-const sora = Sora({
+const dmSans = DM_Sans({
   subsets: ['latin'],
-  variable: '--font-sora',
+  variable: '--font-sans',
   display: 'swap',
   weight: ['300', '400', '500', '600', '700'],
 })
 
-const ibmPlexMono = IBM_Plex_Mono({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
   variable: '--font-mono',
   display: 'swap',
@@ -19,7 +19,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 })
 
 export const viewport: Viewport = {
-  themeColor: '#0F0F0F',
+  themeColor: '#09090B',
   width: 'device-width',
   initialScale: 1,
 }
@@ -29,17 +29,12 @@ export const metadata: Metadata = {
   description: 'A股市场行为逻辑分析系统',
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN" className="dark" style={{ colorScheme: 'dark' }}>
-      <body
-        className={`${sora.variable} ${ibmPlexMono.variable} font-sans bg-[hsl(var(--bg-root))] text-foreground`}
-        style={{ fontFamily: "var(--font-sora), 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif" }}
-      >
+      <body className={`${dmSans.variable} ${jetbrainsMono.variable} bg-[hsl(var(--bg-root))] text-foreground`}
+        style={{ fontFamily: "var(--font-sans), 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif" }}>
+        <div className="noise-overlay" />
         <ErrorBoundary>
           <SystemStatusProvider>
             {children}
@@ -49,4 +44,3 @@ export default function RootLayout({
     </html>
   )
 }
-

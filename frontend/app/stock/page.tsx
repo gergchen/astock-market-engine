@@ -324,8 +324,8 @@ function StockPageContent() {
 function DataItem({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
   return (
     <div>
-      <div className="text-[10px] text-muted-foreground mb-0.5">{label}</div>
-      <div className={`text-xs font-medium font-mono ${valueClass ?? 'text-foreground/90'}`}>{value}</div>
+      <div className="text-[10px] text-white/15 mb-0.5">{label}</div>
+      <div className={`text-xs font-medium font-mono ${valueClass ?? 'text-white/60'}`}>{value}</div>
     </div>
   )
 }
@@ -333,19 +333,19 @@ function DataItem({ label, value, valueClass }: { label: string; value: string; 
 function ScoreCard({ scores }: { scores: StockScores }) {
   const { main_capital, technical, composite } = scores
   return (
-    <Card className="border-border">
+    <Card className="border-white/[0.06] bg-[rgba(13,13,20,0.8)]">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-primary" />
-          <CardTitle className="text-sm">综合评分</CardTitle>
+          <BarChart3 className="w-4 h-4 text-violet-400" />
+          <CardTitle className="text-sm text-white/70">综合评分</CardTitle>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center justify-between p-3 rounded bg-accent/20">
-          <span className="text-xs text-muted-foreground">综合评分</span>
+        <div className="flex items-center justify-between p-3 rounded-xl" style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.1)' }}>
+          <span className="text-xs text-white/30">综合评分</span>
           <span className="text-xl font-bold font-mono" style={{
-            color: composite >= 60 ? 'hsl(var(--up))' : composite >= 30 ? '#F0883E' : 'hsl(var(--down))'
-          }}>{composite}<span className="text-xs text-muted-foreground">/100</span></span>
+            color: composite >= 60 ? '#F43F5E' : composite >= 30 ? '#F59E0B' : '#10B981'
+          }}>{composite}<span className="text-xs text-white/20">/100</span></span>
         </div>
 
         <div>
@@ -360,7 +360,7 @@ function ScoreCard({ scores }: { scores: StockScores }) {
             <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
               <div className="h-full rounded-full transition-all" style={{
                 width: `${main_capital.score}%`,
-                background: capitalStageColor(main_capital.stage),
+                background: capitalStageColor(main_capital.stage), opacity: 0.8,
               }} />
             </div>
             <span className="text-[11px] font-mono text-muted-foreground">{main_capital.score}</span>
@@ -388,7 +388,7 @@ function ScoreCard({ scores }: { scores: StockScores }) {
                 <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
                   <div className="h-full rounded-full" style={{
                     width: `${(item.score / item.max) * 100}%`,
-                    background: 'hsl(220, 100%, 65%)',
+                    background: 'rgba(139,92,246,0.6)',
                   }} />
                 </div>
                 <span className="text-[11px] font-mono text-muted-foreground">{item.score}</span>
