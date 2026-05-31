@@ -81,7 +81,7 @@ const navLinks = [
 function StockPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const symbol = searchParams.get('symbol') || ''
+  const symbol = searchParams.get('code') || searchParams.get('symbol') || ''
 
   const [inputSymbol, setInputSymbol] = useState(symbol)
   const [result, setResult] = useState<AnalysisResult | null>(null)
