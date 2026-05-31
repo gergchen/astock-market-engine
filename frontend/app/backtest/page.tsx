@@ -10,9 +10,11 @@ import AppHeader from '@/components/AppHeader'
 import { API_BASE } from '@/lib/api'
 
 const STRATEGIES = [
-  { key: 'ma_cross', name: '均线交叉', desc: '金叉买入，死叉卖出' },
-  { key: 'volume_breakout', name: '放量突破', desc: '量价突破后持有固定周期' },
-  { key: 'dragon_follow', name: '龙头跟随', desc: '追涨强势股，移动止盈' },
+  { key: 'ma_cross', name: '均线交叉 V2', desc: '趋势过滤 + RSI确认 + ATR止损' },
+  { key: 'volume_breakout', name: '放量突破 V2', desc: '站上MA20 + 量比确认 + ATR止损' },
+  { key: 'dragon_follow', name: '龙头跟随 V2', desc: '双周期动量 + ATR移动止盈' },
+  { key: 'trend_momentum', name: '趋势动量', desc: 'EMA多头排列 + RSI健康区' },
+  { key: 'mean_reversion', name: '均值回归', desc: '布林带超卖 + RSI反弹' },
 ]
 
 interface BacktestResult {
